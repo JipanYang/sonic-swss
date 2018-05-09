@@ -1,4 +1,5 @@
-#include <string.h>
+#include <string>
+#include "sairedis.h"
 #include "tunneldecaporch.h"
 #include "portsorch.h"
 #include "logger.h"
@@ -207,7 +208,9 @@ bool TunnelDecapOrch::addDecapTunnel(string key, string type, IpAddresses dst_ip
     overlay_intf_attr.value.s32 = SAI_ROUTER_INTERFACE_TYPE_LOOPBACK;
     overlay_intf_attrs.push_back(overlay_intf_attr);
 
+    SET_OBJ_OWNER("OVERLAY_INTERFACE_");
     status = sai_router_intfs_api->create_router_interface(&overlayIfId, gSwitchId, (uint32_t)overlay_intf_attrs.size(), overlay_intf_attrs.data());
+    UNSET_OBJ_OWNER();
     if (status != SAI_STATUS_SUCCESS)
     {
         SWSS_LOG_ERROR("Failed to create overlay router interface %d", status);

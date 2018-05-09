@@ -20,6 +20,7 @@
 #include "countercheckorch.h"
 #include "bufferorch.h"
 #include "notifier.h"
+#include "sairedis.h"
 
 extern sai_switch_api_t *sai_switch_api;
 extern sai_bridge_api_t *sai_bridge_api;
@@ -2328,8 +2329,9 @@ bool PortsOrch::addLag(string lag_alias)
     SWSS_LOG_ENTER();
 
     sai_object_id_t lag_id;
+    SET_OBJ_OWNER(lag_alias + "_");
     sai_status_t status = sai_lag_api->create_lag(&lag_id, gSwitchId, 0, NULL);
-
+    UNSET_OBJ_OWNER();
     if (status != SAI_STATUS_SUCCESS)
     {
         SWSS_LOG_ERROR("Failed to create LAG %s lid:%lx", lag_alias.c_str(), lag_id);
