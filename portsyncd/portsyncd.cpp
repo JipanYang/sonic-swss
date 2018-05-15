@@ -6,6 +6,7 @@
 #include <set>
 #include <map>
 #include <list>
+#include <sys/stat.h>
 #include "dbconnector.h"
 #include "select.h"
 #include "netdispatcher.h"
@@ -31,6 +32,9 @@ using namespace swss;
 set<string> g_portSet;
 bool g_init = false;
 
+// temporary test
+bool g_warmStart = false;
+
 void usage()
 {
     cout << "Usage: portsyncd [-p port_config.ini]" << endl;
@@ -49,6 +53,7 @@ int main(int argc, char **argv)
     int opt;
     string port_config_file;
     map<string, KeyOpFieldsValuesTuple> port_cfg_map;
+    struct stat sb;
 
     while ((opt = getopt(argc, argv, "p:v:h")) != -1 )
     {
@@ -64,6 +69,11 @@ int main(int argc, char **argv)
             usage();
             return EXIT_FAILURE;
         }
+    }
+
+    if (stat("/etc/sonic/warm_restart", &sb) == 0 && S_ISDIR(sb.st_mode))
+    {
+        g_warmStart = true;
     }
 
     DBConnector cfgDb(CONFIG_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
@@ -125,6 +135,15 @@ int main(int argc, char **argv)
                 if (!port_cfg_map.empty())
                 {
                     handlePortConfig(p, port_cfg_map);
+                }
+                if (!g_init && g_warmStart)
+                {
+                    // TODO:  PortsOrch may set a flag in state DB after lane discovery,
+                    // at that time syncd has done libsai init. Check availability of that flag.
+                    // This is mainly for warm restart.
+
+                    cout << "Warm start: send netlink RTM_GETLINK request" << endl;
+                    netlink.dumpRequest(RTM_GETLINK);
                 }
             }
 

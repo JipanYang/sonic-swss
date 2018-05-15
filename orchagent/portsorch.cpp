@@ -246,6 +246,9 @@ PortsOrch::PortsOrch(DBConnector *db, vector<table_name_with_pri_t> &tableNames)
     m_portStatusNotificationConsumer = new swss::NotificationConsumer(notificationsDb, "NOTIFICATIONS");
     auto portStatusNotificatier = new Notifier(m_portStatusNotificationConsumer, this);
     Orch::addExecutor("PORT_STATUS_NOTIFICATIONS", portStatusNotificatier);
+    // Read the pre-existing data for LAG in appDB.
+    addExistingData(db, APP_LAG_TABLE_NAME);
+    addExistingData(db, APP_LAG_MEMBER_TABLE_NAME);
 }
 
 void PortsOrch::removeDefaultVlanMembers()

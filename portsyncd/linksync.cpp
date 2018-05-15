@@ -29,6 +29,9 @@ const string LAG_PREFIX = "PortChannel";
 extern set<string> g_portSet;
 extern bool g_init;
 
+// temporary test
+extern bool g_warmStart;
+
 struct if_nameindex
 {
     unsigned int if_index;
@@ -143,7 +146,7 @@ void LinkSync::onMsg(int nlmsg_type, struct nl_object *obj)
      * coming from old interfaces.
      */
 
-    if (m_ifindexOldNameMap.find(ifindex) != m_ifindexOldNameMap.end())
+    if (!g_warmStart  && (m_ifindexOldNameMap.find(ifindex) != m_ifindexOldNameMap.end()))
     {
         SWSS_LOG_INFO("nlmsg type:%d Ignoring message for old interface %s(%d)",
                 nlmsg_type, key.c_str(), ifindex);
