@@ -21,6 +21,7 @@
 #include "bufferorch.h"
 #include "notifier.h"
 #include "sairedis.h"
+#include <warm_restart.h>
 
 extern sai_switch_api_t *sai_switch_api;
 extern sai_bridge_api_t *sai_bridge_api;
@@ -1998,19 +1999,22 @@ bool PortsOrch::initializePort(Port &p)
         return false;
     }
 #endif
+    // Only set admin and update db port oper_status at cold start
+    if (!isWarmStart())
+    {
+        /* Set default port admin status to DOWN */
+        /* FIXME: Do we need this? The default port admin status is false */
+        setPortAdminStatus(p.m_port_id, false);
 
-    /* Set default port admin status to DOWN */
-    /* FIXME: Do we need this? The default port admin status is false */
-    setPortAdminStatus(p.m_port_id, false);
-
-    /**
-     * Create default database port oper status as DOWN
-     * This status will be updated when receiving port_oper_status_notification.
-     */
-    vector<FieldValueTuple> vector;
-    FieldValueTuple tuple("oper_status", "down");
-    vector.push_back(tuple);
-    m_portTable->set(p.m_alias, vector);
+        /**
+         * Create default database port oper status as DOWN
+         * This status will be updated when receiving port_oper_status_notification.
+         */
+        vector<FieldValueTuple> vector;
+        FieldValueTuple tuple("oper_status", "down");
+        vector.push_back(tuple);
+        m_portTable->set(p.m_alias, vector);
+    }
 
     return true;
 }

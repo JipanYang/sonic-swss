@@ -15,6 +15,7 @@
 #include "portsyncd/linksync.h"
 #include "subscriberstatetable.h"
 #include "exec.h"
+#include "warm_restart.h"
 
 using namespace std;
 using namespace swss;
@@ -31,9 +32,6 @@ using namespace swss;
  */
 set<string> g_portSet;
 bool g_init = false;
-
-// temporary test
-bool g_warmStart = false;
 
 void usage()
 {
@@ -53,7 +51,6 @@ int main(int argc, char **argv)
     int opt;
     string port_config_file;
     map<string, KeyOpFieldsValuesTuple> port_cfg_map;
-    struct stat sb;
 
     while ((opt = getopt(argc, argv, "p:v:h")) != -1 )
     {
@@ -71,16 +68,13 @@ int main(int argc, char **argv)
         }
     }
 
-    if (stat("/etc/sonic/warm_restart", &sb) == 0 && S_ISDIR(sb.st_mode))
-    {
-        g_warmStart = true;
-    }
-
     DBConnector cfgDb(CONFIG_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
     DBConnector appl_db(APPL_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
     DBConnector state_db(STATE_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
     ProducerStateTable p(&appl_db, APP_PORT_TABLE_NAME);
     SubscriberStateTable portCfg(&cfgDb, CFG_PORT_TABLE_NAME);
+
+    checkWarmStart(&appl_db, "portsyncd");
 
     LinkSync sync(&appl_db, &state_db);
     NetDispatcher::getInstance().registerMessageHandler(RTM_NEWLINK, &sync);
@@ -103,6 +97,12 @@ int main(int argc, char **argv)
 
         s.addSelectable(&netlink);
         s.addSelectable(&portCfg);
+        if (isWarmStart())
+        {
+            // Dump existing Links
+            cout << "Warm start: send netlink RTM_GETLINK request" << endl;
+            netlink.dumpRequest(RTM_GETLINK);
+        }
         while (true)
         {
             Selectable *temps;
@@ -135,15 +135,6 @@ int main(int argc, char **argv)
                 if (!port_cfg_map.empty())
                 {
                     handlePortConfig(p, port_cfg_map);
-                }
-                if (!g_init && g_warmStart)
-                {
-                    // TODO:  PortsOrch may set a flag in state DB after lane discovery,
-                    // at that time syncd has done libsai init. Check availability of that flag.
-                    // This is mainly for warm restart.
-
-                    cout << "Warm start: send netlink RTM_GETLINK request" << endl;
-                    netlink.dumpRequest(RTM_GETLINK);
                 }
             }
 

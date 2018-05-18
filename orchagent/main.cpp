@@ -22,6 +22,7 @@ extern "C" {
 #include "saihelper.h"
 #include "notifications.h"
 #include <signal.h>
+#include <warm_restart.h>
 
 using namespace std;
 using namespace swss;
@@ -252,6 +253,8 @@ int main(int argc, char **argv)
     DBConnector appl_db(APPL_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
     DBConnector config_db(CONFIG_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
     DBConnector state_db(STATE_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
+
+    checkWarmStart(&appl_db, "orchagent");
 
     OrchDaemon *orchDaemon = new OrchDaemon(&appl_db, &config_db, &state_db);
     if (!orchDaemon->init())

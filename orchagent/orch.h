@@ -19,6 +19,7 @@ extern "C" {
 #include "notificationconsumer.h"
 #include "selectabletimer.h"
 #include "macaddress.h"
+#include "warm_restart.h"
 
 using namespace std;
 using namespace swss;

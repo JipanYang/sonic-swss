@@ -6,6 +6,7 @@
 #include "exec.h"
 #include "tokenize.h"
 #include "shellcmd.h"
+#include "warm_restart.h"
 
 using namespace std;
 using namespace swss;
@@ -31,6 +32,21 @@ VlanMgr::VlanMgr(DBConnector *cfgDb, DBConnector *appDb, DBConnector *stateDb, c
 {
     SWSS_LOG_ENTER();
 
+    if (isWarmStart())
+    {
+
+        const std::string cmds = std::string("")
+          + IP_CMD + " link show " + DOT1Q_BRIDGE_NAME + " 2>/dev/null";
+
+        std::string res;
+        int ret = swss::exec(cmds, res);
+        if (ret == 0)
+        {
+            // Don't reset vlan aware bridge upon swss docker warm restart.
+            SWSS_LOG_INFO("vlanmgrd warm start, skipping bridge create");
+            return;
+        }
+    }
     // Initialize Linux dot1q bridge and enable vlan filtering
     // The command should be generated as:
     // /bin/bash -c "/sbin/ip link del Bridge 2>/dev/null ;
