@@ -239,15 +239,6 @@ PortsOrch::PortsOrch(DBConnector *db, vector<table_name_with_pri_t> &tableNames)
     m_default1QBridge = attrs[0].value.oid;
     m_defaultVlan = attrs[1].value.oid;
 
-    removeDefaultVlanMembers();
-    removeDefaultBridgePorts();
-
-    /* Add port oper status notification support */
-    DBConnector *notificationsDb = new DBConnector(ASIC_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
-    m_portStatusNotificationConsumer = new swss::NotificationConsumer(notificationsDb, "NOTIFICATIONS");
-    auto portStatusNotificatier = new Notifier(m_portStatusNotificationConsumer, this);
-    Orch::addExecutor("PORT_STATUS_NOTIFICATIONS", portStatusNotificatier);
-
     if (isWarmStart())
     {
         // Read the pre-existing data for LAG in appDB.
@@ -255,8 +246,19 @@ PortsOrch::PortsOrch(DBConnector *db, vector<table_name_with_pri_t> &tableNames)
         addExistingData(db, APP_LAG_MEMBER_TABLE_NAME);
         addExistingData(db, APP_VLAN_TABLE_NAME);
         addExistingData(db, APP_VLAN_MEMBER_TABLE_NAME);
-
     }
+    else
+    {
+        removeDefaultVlanMembers();
+        removeDefaultBridgePorts();
+    }
+
+    /* Add port oper status notification support */
+    DBConnector *notificationsDb = new DBConnector(ASIC_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
+    m_portStatusNotificationConsumer = new swss::NotificationConsumer(notificationsDb, "NOTIFICATIONS");
+    auto portStatusNotificatier = new Notifier(m_portStatusNotificationConsumer, this);
+    Orch::addExecutor("PORT_STATUS_NOTIFICATIONS", portStatusNotificatier);
+
 }
 
 void PortsOrch::removeDefaultVlanMembers()
@@ -1683,6 +1685,14 @@ void PortsOrch::doVlanMemberTask(Consumer &consumer)
             if (vlan.m_members.find(port_alias) != vlan.m_members.end())
             {
                 it = consumer.m_toSync.erase(it);
+                continue;
+            }
+
+            // Temporary workaround for lag vlan bug in libsai.
+            if (port.m_type == Port::LAG && port.m_members.size() == 0)
+            {
+                SWSS_LOG_INFO("%s has no member yet, hold from adding it to %s ", port_alias.c_str(), vlan_alias.c_str());
+                it++;
                 continue;
             }
 

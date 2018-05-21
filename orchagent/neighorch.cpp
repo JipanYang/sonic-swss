@@ -19,8 +19,11 @@ NeighOrch::NeighOrch(DBConnector *db, string tableName, IntfsOrch *intfsOrch) :
         Orch(db, tableName, neighorch_pri), m_intfsOrch(intfsOrch)
 {
     SWSS_LOG_ENTER();
-    // Read the pre-existing data for neigh in appDB.
-    addExistingData(db, tableName);
+    if (isWarmStart())
+    {
+        // Read the pre-existing data for neigh in appDB.
+        addExistingData(db, tableName);
+    }
 }
 
 bool NeighOrch::hasNextHop(IpAddress ipAddress)
