@@ -92,6 +92,19 @@ public:
     virtual void execute() { }
     virtual void drain() { }
 
+    virtual string getTableName() const
+    {
+        return "";
+    }
+    virtual bool isEmpty()
+    {
+        return true;
+    }
+    virtual void dumpTasks(vector<string> &ts)
+    {
+        return;
+    }
+
 protected:
     Selectable *m_selectable;
     Orch *m_orch;
@@ -117,6 +130,11 @@ public:
         return getConsumerTable()->getTableName();
     }
 
+    bool isEmpty()
+    {
+        return (m_toSync.size() == 0);
+    }
+    void dumpTasks(vector<string> &ts);
     void addToSync(std::deque<KeyOpFieldsValuesTuple> &entries);
     void execute();
     void drain();
@@ -164,6 +182,13 @@ public:
 
     /* TODO: refactor recording */
     static void recordTuple(Consumer &consumer, KeyOpFieldsValuesTuple &tuple);
+
+    /*
+    * Check if there is pending task for this orch and
+    * return the name of first non-empty executor if executorName not set.
+    */
+    bool isEmpty(string &executorName);
+    void dumpTasks(vector<string> &ts);
 protected:
     ConsumerMap m_consumerMap;
 

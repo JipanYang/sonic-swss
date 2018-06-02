@@ -27,6 +27,11 @@ IntfsOrch::IntfsOrch(DBConnector *db, string tableName) :
         Orch(db, tableName, intfsorch_pri)
 {
     SWSS_LOG_ENTER();
+    if (isWarmStart())
+    {
+        // Read the pre-existing data for INTF in appDB.
+        addExistingData(db, APP_INTF_TABLE_NAME);
+    }
 }
 
 sai_object_id_t IntfsOrch::getRouterIntfsId(const string &alias)
@@ -84,7 +89,16 @@ void IntfsOrch::doTask(Consumer &consumer)
         {
             if (alias == "lo")
             {
-                addIp2MeRoute(ip_prefix);
+                // set request for lo may come after warm start restore
+                auto it_intfs = m_syncdIntfses.find(alias);
+                if (it_intfs == m_syncdIntfses.end())
+                {
+                    IntfsEntry intfs_entry;
+                    intfs_entry.ref_count = 0;
+                    m_syncdIntfses[alias] = intfs_entry;
+                    addIp2MeRoute(ip_prefix);
+                }
+
                 it = consumer.m_toSync.erase(it);
                 continue;
             }
@@ -162,6 +176,7 @@ void IntfsOrch::doTask(Consumer &consumer)
         {
             if (alias == "lo")
             {
+                m_syncdIntfses.erase(alias);
                 removeIp2MeRoute(ip_prefix);
                 it = consumer.m_toSync.erase(it);
                 continue;

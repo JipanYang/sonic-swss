@@ -116,7 +116,15 @@ bool OrchDaemon::init()
         CFG_DTEL_EVENT_TABLE_NAME
     };
 
-    m_orchList = { switch_orch, gCrmOrch, gPortsOrch, intfs_orch, gNeighOrch, gRouteOrch, copp_orch, tunnel_decap_orch, qos_orch, gBufferOrch, mirror_orch };
+    /*
+     * The order of the orch list is important for state restore of warm start and
+     * the queued processing in m_toSync map once after gPortsOrch->isInitDone() is set.
+     *
+     * For the multiple consumers in ports_tables, tasks for LAG_TABLE is processed before VLAN_TABLE
+     * when iterating ConsumerMap.
+     * That is ensured implicitly by the order of map key, "LAG_TABLE" is smaller than "VLAN_TABLE" in lexicographic order.
+     */
+    m_orchList = { switch_orch, gCrmOrch, gPortsOrch, intfs_orch, gNeighOrch, gRouteOrch, copp_orch, tunnel_decap_orch, qos_orch, gBufferOrch };
 
     bool initialize_dtel = false;
     if (platform == BFN_PLATFORM_SUBSTRING || platform == VS_PLATFORM_SUBSTRING)
@@ -152,12 +160,12 @@ bool OrchDaemon::init()
         gAclOrch = new AclOrch(acl_table_connectors, gPortsOrch, mirror_orch, gNeighOrch, gRouteOrch);
     }
 
-    m_orchList.push_back(gAclOrch);
     m_orchList.push_back(gFdbOrch);
+    m_orchList.push_back(mirror_orch);
+    m_orchList.push_back(gAclOrch);
     m_orchList.push_back(vrf_orch);
-    
-    m_select = new Select();
 
+    m_select = new Select();
 
     vector<string> flex_counter_tables = {
         CFG_FLEX_COUNTER_TABLE_NAME
@@ -279,6 +287,12 @@ void OrchDaemon::start()
         m_select->addSelectables(o->getSelectables());
     }
 
+    static bool restored = true;
+    if (isWarmStart())
+    {
+        restored = false;
+    }
+
     while (true)
     {
         Selectable *s;
@@ -304,7 +318,14 @@ void OrchDaemon::start()
         }
 
         auto *c = (Executor *)s;
-        c->execute();
+        /*
+         * Don't process any new request other than APP PORT_TABLE
+         * before restore is finished.
+         */
+        if (restored || c->getTableName() == APP_PORT_TABLE_NAME)
+        {
+            c->execute();
+        }
 
         /* After each iteration, periodically check all m_toSync map to
          * execute all the remaining tasks that need to be retried. */
@@ -313,5 +334,39 @@ void OrchDaemon::start()
         for (Orch *o : m_orchList)
             o->doTask();
 
+        /*
+         * All data to be restored have been added to m_toSync of each orch
+         * at contructor phase.  And the order of m_orchList guranteed the
+         * dependency of tasks had been met, restore is done.
+         */
+        if (!restored && gPortsOrch->isInitDone())
+        {
+            /*
+            * drain LAG_MEMBER_TABLE and VLAN_MEMBER_TABLE since they
+            * were checked before LAG_TABLE and VLAN_TABLE previously.
+            */
+            for (Orch *o : m_orchList)
+            {
+                o->doTask();
+            }
+
+            for (Orch *o : m_orchList)
+            {
+                string  tableName = "";
+                if (!o->isEmpty(tableName))
+                {
+                    SWSS_LOG_ERROR("task for %s is not empty", tableName.c_str());
+                    vector<string> ts;
+                    o->dumpTasks(ts);
+                    for(auto &s : ts)
+                    {
+                        SWSS_LOG_ERROR("%s", s.c_str());
+                    }
+                }
+            }
+            gPortsOrch->syncUpPortState();
+            // syncUpFdb();
+            restored = true;
+        }
     }
 }

@@ -140,6 +140,22 @@ void Consumer::drain()
         m_orch->doTask(*this);
 }
 
+void Consumer::dumpTasks(vector<string> &ts)
+{
+    for (auto &tm :m_toSync)
+    {
+        KeyOpFieldsValuesTuple& tuple = tm.second;
+
+        string s = getTableName() + ":" + kfvKey(tuple)
+               + "|" + kfvOp(tuple);
+        for (auto i = kfvFieldsValues(tuple).begin(); i != kfvFieldsValues(tuple).end(); i++)
+        {
+            s += "|" + fvField(*i) + ":" + fvValue(*i);
+        }
+
+        ts.push_back(s);
+    }
+}
 
 void Orch::addExistingData(DBConnector *db, string tableName)
 {
@@ -274,6 +290,34 @@ void Orch::doTask()
     for(auto &it : m_consumerMap)
     {
         it.second->drain();
+    }
+}
+
+bool Orch::isEmpty(string &executorName)
+{
+    for(auto &it : m_consumerMap)
+    {
+        if (it.second->isEmpty() == false)
+        {
+            if (executorName != "" && executorName != it.first)
+            {
+                continue;
+            }
+            executorName = it.first;
+            return false;
+        }
+    }
+    return true;
+}
+
+void Orch::dumpTasks(vector<string> &ts)
+{
+    for(auto &it : m_consumerMap)
+    {
+        if (it.second->isEmpty() == false)
+        {
+            it.second->dumpTasks(ts);
+        }
     }
 }
 

@@ -70,6 +70,7 @@ public:
     bool bindAclTable(sai_object_id_t id, sai_object_id_t table_oid, sai_object_id_t &group_member_oid, acl_stage_type_t acl_stage = ACL_STAGE_INGRESS);
 
     void generateQueueMap();
+    void syncUpPortState();
 private:
     unique_ptr<Table> m_counterTable;
     unique_ptr<Table> m_portTable;
@@ -160,6 +161,8 @@ private:
 
     bool setPortAutoNeg(sai_object_id_t id, int an);
     bool setPortFecMode(sai_object_id_t id, int fec);
+
+    sai_port_oper_status_t getDbPortOperStatus(sai_object_id_t id);
 };
 #endif /* SWSS_PORTSORCH_H */
 
