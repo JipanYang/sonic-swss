@@ -10,6 +10,9 @@
 #include "crmorch.h"
 #include "notifier.h"
 #include "sai_serialize.h"
+#include "json.hpp"
+
+using json = nlohmann::json;
 
 extern sai_fdb_api_t    *sai_fdb_api;
 
@@ -34,7 +37,61 @@ FdbOrch::FdbOrch(DBConnector *db, string tableName, PortsOrch *port) :
     m_fdbNotificationConsumer = new swss::NotificationConsumer(notificationsDb, "NOTIFICATIONS");
     auto fdbNotifier = new Notifier(m_fdbNotificationConsumer, this);
     Orch::addExecutor("FDB_NOTIFICATIONS", fdbNotifier);
-    // addExistingData(db, tableName);
+
+    if (isWarmStart())
+    {
+        addExistingData(db, tableName);
+    }
+}
+
+void FdbOrch::syncUpFdb()
+{
+    SWSS_LOG_ENTER();
+
+    string tableName = "ASIC_STATE:SAI_OBJECT_TYPE_FDB_ENTRY";
+    DBConnector *db = new DBConnector(ASIC_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
+    swss::Table table(db, tableName);
+    vector<string> keys;
+
+    table.getKeys(keys);
+    for (const auto &key: keys)
+    {
+        std::vector<FieldValueTuple> values;
+
+        if (!table.get(key, values))
+        {
+            continue;
+        }
+
+        string s = tableName + ":" + key
+                + "|" + "SET";
+        for (auto i = values.begin(); i != values.end(); i++)
+        {
+            s += "|" + fvField(*i) + ":" + fvValue(*i);
+        }
+        SWSS_LOG_INFO("%s", s.c_str());
+
+        sai_object_id_t bridge_port_id = SAI_NULL_OBJECT_ID;
+        sai_fdb_entry_type_t entryType = SAI_FDB_ENTRY_TYPE_STATIC;
+        for (auto &v: values)
+        {
+            if(fvField(v) == "SAI_FDB_ENTRY_ATTR_TYPE" && fvValue(v) == "SAI_FDB_ENTRY_TYPE_DYNAMIC")
+            {
+                entryType = SAI_FDB_ENTRY_TYPE_DYNAMIC;
+            }
+            if(fvField(v) == "SAI_FDB_ENTRY_ATTR_BRIDGE_PORT_ID")
+            {
+                sai_deserialize_object_id(fvValue(v), bridge_port_id);
+            }
+        }
+        // Only process dynamic FDB.
+        if(bridge_port_id != SAI_NULL_OBJECT_ID && entryType == SAI_FDB_ENTRY_TYPE_DYNAMIC)
+        {
+            sai_fdb_entry_t entry;
+            sai_deserialize_fdb_entry(key, entry);
+            this->update(SAI_FDB_EVENT_LEARNED, &entry, bridge_port_id);
+        }
+    }
 }
 
 void FdbOrch::update(sai_fdb_event_t type, const sai_fdb_entry_t* entry, sai_object_id_t bridge_port_id)
@@ -52,6 +109,13 @@ void FdbOrch::update(sai_fdb_event_t type, const sai_fdb_entry_t* entry, sai_obj
         {
             SWSS_LOG_ERROR("Failed to get port by bridge port ID 0x%lx", bridge_port_id);
             return;
+        }
+
+        if (m_entries.count(update.entry) != 0) // we already have such entries
+        {
+             SWSS_LOG_INFO("FdbOrch notification: mac %s is already in bv_id 0x%lx",
+                    update.entry.mac.to_string().c_str(), entry->bv_id);
+             break;
         }
 
         update.add = true;

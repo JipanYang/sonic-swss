@@ -365,7 +365,7 @@ void OrchDaemon::start()
                 }
             }
             gPortsOrch->syncUpPortState();
-            // syncUpFdb();
+            gFdbOrch->syncUpFdb();
             restored = true;
         }
     }
