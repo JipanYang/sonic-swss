@@ -2,6 +2,7 @@
 
 #include "bufferorch.h"
 #include "logger.h"
+#include "sairedis.h"
 
 #include <sstream>
 #include <iostream>
@@ -349,7 +350,9 @@ task_process_status BufferOrch::processBufferProfile(Consumer &consumer)
         }
         else
         {
+            SET_OBJ_OWNER(object_name + "_");
             sai_status = sai_buffer_api->create_buffer_profile(&sai_object, gSwitchId, (uint32_t)attribs.size(), attribs.data());
+            UNSET_OBJ_OWNER();
             if (SAI_STATUS_SUCCESS != sai_status)
             {
                 SWSS_LOG_ERROR("Failed to create buffer profile %s with type %s, rv:%d", object_name.c_str(), map_type_name.c_str(), sai_status);
