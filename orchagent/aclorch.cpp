@@ -9,6 +9,7 @@
 #include "tokenize.h"
 #include "timer.h"
 #include "crmorch.h"
+#include "sairedis.h"
 
 using namespace std;
 using namespace swss;
@@ -601,11 +602,14 @@ bool AclRule::createCounter()
     attr.value.booldata = true;
     counter_attrs.push_back(attr);
 
+    SET_OBJ_OWNER("ACL_" + m_tableId + "_" + m_id + "_");
     if (sai_acl_api->create_acl_counter(&m_counterOid, gSwitchId, (uint32_t)counter_attrs.size(), counter_attrs.data()) != SAI_STATUS_SUCCESS)
     {
+        UNSET_OBJ_OWNER();
         SWSS_LOG_ERROR("Failed to create counter for the rule %s in table %s", m_id.c_str(), m_tableId.c_str());
         return false;
     }
+    UNSET_OBJ_OWNER();
 
     gCrmOrch->incCrmAclTableUsedCounter(CrmResourceType::CRM_ACL_COUNTER, m_tableOid);
 
@@ -2320,7 +2324,7 @@ sai_status_t AclOrch::bindAclTable(sai_object_id_t table_oid, AclTable &aclTable
     sai_status_t status = SAI_STATUS_SUCCESS;
 
     SWSS_LOG_INFO("%s table %s to ports", bind ? "Bind" : "Unbind", aclTable.id.c_str());
-    
+
     if (aclTable.ports.empty())
     {
         if (bind)
