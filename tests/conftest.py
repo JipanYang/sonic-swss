@@ -9,6 +9,8 @@ from swsscommon import swsscommon
 def pytest_addoption(parser):
     parser.addoption("--dvsname", action="store", default=None,
                       help="dvs name")
+    parser.addoption("--notempview", action="store_true", default=False,
+                      help="Do not use temp view in syncd")
 
 class AsicDbValidator(object):
     def __init__(self, dvs):
@@ -105,7 +107,7 @@ class VirtualServer(object):
         os.system("ip netns exec %s %s" % (self.nsname, cmd))
 
 class DockerVirtualSwitch(object):
-    def __init__(self, name=None):
+    def __init__(self, name=None, useTempView=True):
         self.pnames = ['fpmsyncd',
                        'intfmgrd',
                        'intfsyncd',
@@ -124,6 +126,13 @@ class DockerVirtualSwitch(object):
 
         self.ctn = None
         self.cleanup = True
+
+        # whether to disable temp view in syncd
+        if useTempView == False:
+            os.system("mkdir -p /var/run/redis-vs/noUseTempView")
+        else:
+            os.system("rm -f -r /var/run/redis-vs/noUseTempView")
+
         if name != None:
             # get virtual switch container
             for ctn in self.client.containers.list():
@@ -139,7 +148,7 @@ class DockerVirtualSwitch(object):
             for ctn in self.client.containers.list():
                 if ctn.id == ctn_sw_id or ctn.name == ctn_sw_id:
                     ctn_sw_name = ctn.name
-           
+
             (status, output) = commands.getstatusoutput("docker inspect --format '{{.State.Pid}}' %s" % ctn_sw_name)
             self.ctn_sw_pid = int(output)
 
@@ -222,7 +231,11 @@ class DockerVirtualSwitch(object):
 
 @pytest.yield_fixture(scope="module")
 def dvs(request):
+    useTempView = True;
+    if request.config.getoption("--notempview"):
+        useTempView = False
+
     name = request.config.getoption("--dvsname")
-    dvs = DockerVirtualSwitch(name)
+    dvs = DockerVirtualSwitch(name, useTempView)
     yield dvs
     dvs.destroy()
