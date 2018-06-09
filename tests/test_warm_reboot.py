@@ -6,6 +6,10 @@ import json
 
 def test_swss_warm_restore(dvs):
 
+    # syncd warm start with temp view not supported yet
+    if dvs.tmpview == True:
+        return
+
     dvs.runcmd("/usr/bin/stop_swss.sh")
     time.sleep(3)
     dvs.runcmd("mv /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b")

@@ -132,6 +132,7 @@ class DockerVirtualSwitch(object):
             os.system("mkdir -p /var/run/redis-vs/noUseTempView")
         else:
             os.system("rm -f -r /var/run/redis-vs/noUseTempView")
+        self.tmpview = useTempView
 
         if name != None:
             # get virtual switch container
