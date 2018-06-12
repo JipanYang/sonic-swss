@@ -708,7 +708,7 @@ bool PortsOrch::setPortPvid(Port &port, sai_uint32_t pvid)
 
     if (port.m_rif_id)
     {
-        SWSS_LOG_ERROR("pvid setting for router interface is not allowed");
+        SWSS_LOG_ERROR("pvid setting for router interface %s is not allowed", port.m_alias.c_str());
         return false;
     }
 

@@ -162,6 +162,12 @@ CrmOrch::CrmOrch(DBConnector *db, string tableName):
         m_resourcesMap.emplace(res.first, CrmResourceEntry(res.second, CRM_THRESHOLD_TYPE_DEFAULT, CRM_THRESHOLD_LOW_DEFAULT, CRM_THRESHOLD_HIGH_DEFAULT));
     }
 
+    if (isWarmStart())
+    {
+        // The CRM stats needs to be populated again
+        m_countersCrmTable->del(CRM_COUNTERS_TABLE_KEY);
+    }
+
     auto executor = new ExecutableTimer(m_timer.get(), this);
     Orch::addExecutor("CRM_COUNTERS_POLL", executor);
     m_timer->start();
@@ -333,7 +339,7 @@ void CrmOrch::decCrmAclUsedCounter(CrmResourceType resource, sai_acl_stage_t sta
     {
         m_resourcesMap.at(resource).countersMap[getCrmAclKey(stage, point)].usedCounter--;
 
-        // Remove ACL table related counters 
+        // Remove ACL table related counters
         if (resource == CrmResourceType::CRM_ACL_TABLE)
         {
             auto & cntMap = m_resourcesMap.at(CrmResourceType::CRM_ACL_TABLE).countersMap;

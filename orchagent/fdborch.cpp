@@ -90,8 +90,10 @@ void FdbOrch::syncUpFdb()
             sai_fdb_entry_t entry;
             sai_deserialize_fdb_entry(key, entry);
             this->update(SAI_FDB_EVENT_LEARNED, &entry, bridge_port_id);
+            SWSS_LOG_INFO("FDB from ASICDB %s", key.c_str());
         }
     }
+
 }
 
 void FdbOrch::update(sai_fdb_event_t type, const sai_fdb_entry_t* entry, sai_object_id_t bridge_port_id)
