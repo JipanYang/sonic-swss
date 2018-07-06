@@ -10,7 +10,6 @@
 #define DEFAULT_RECONCILE_TIMER 5
 #define SELECT_TIMEOUT 1000
 #define CACHE_STATE	"cache-state"
-#define CFG_WARMSTART_TABLE_NAME "WARMSTART_TABLE"
 
 typedef std::unordered_map<std::string, std::vector<swss::FieldValueTuple>> NeighborTableMap;
 
@@ -28,13 +27,13 @@ public:
     NeighRestartAssit(RedisPipeline *pipelineAppDB, RedisPipeline *pipelineConfDB);
     virtual ~NeighRestartAssit();
 
-    enum cache_state_t 
+    enum cache_state_t
     {
-	STALE	= 0,
-	SAME 	= 1,
-	NEW 	= 2,
+        STALE	= 0,
+        SAME 	= 1,
+        NEW 	= 2,
         DELETE  = 3,
-	UNKNOWN = 4
+        UNKNOWN = 4
     };
     bool checkReconcile();
     void readTableToMap();
@@ -53,12 +52,9 @@ private:
     Table m_cfgTable;
     std::string state_string[5] = {"STALE", "SAME", "NEW", "DELETE", "UNKNOWN"};
     void readTableToMapExec();
-    std::string joinVectorString(std::vector<FieldValueTuple> fv);
+    std::string joinVectorString(const std::vector<FieldValueTuple> &fv);
     void setCacheEntryState(std::vector<FieldValueTuple> &fvVector, cache_state_t state);
     cache_state_t getCacheEntryState(const std::vector<FieldValueTuple> &fvVector);
-
-//protected:
-//    ProducerStateTable m_neighTable;
 };
 
 class NeighSync : public NetMsg, public NeighRestartAssit

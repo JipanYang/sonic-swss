@@ -17,7 +17,7 @@ bool isWarmStart()
 // Check warm start flag at the very begining of application, do it once for each process.
 void checkWarmStart(DBConnector *db, std::string app_name)
 {
-    std::unique_ptr<Table>  warmStartTable = std::unique_ptr<Table>(new Table(db, APP_WARM_START_TABLE_NAME));
+    std::unique_ptr<Table>  warmStartTable = std::unique_ptr<Table>(new Table(db, APP_WARM_RESTART_TABLE_NAME));
     std::vector<FieldValueTuple> vfv;
 
     if (warmStartTable->get(app_name, vfv))

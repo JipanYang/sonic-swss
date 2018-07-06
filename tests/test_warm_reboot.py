@@ -26,13 +26,13 @@ def test_swss_warm_restore(dvs):
 
     db = swsscommon.DBConnector(0, dvs.redis_sock, 0)
 
-    warmtbl = swsscommon.Table(db, "WARM_START_TABLE")
+    warmtbl = swsscommon.Table(db, "WARM_RESTART_TABLE")
 
     keys = warmtbl.getKeys()
     print(keys)
 
     # restart_count for each process in SWSS should be 1
-    for key in ['vlanmgrd', 'portsyncd', 'orchagent']:
+    for key in ['vlanmgrd', 'portsyncd', 'orchagent', 'neighsyncd']:
         (status, fvs) = warmtbl.get(key)
         assert status == True
         for fv in fvs:
@@ -70,7 +70,7 @@ def test_swss_port_state_syncup(dvs):
 
     db = swsscommon.DBConnector(0, dvs.redis_sock, 0)
 
-    warmtbl = swsscommon.Table(db, "WARM_START_TABLE")
+    warmtbl = swsscommon.Table(db, "WARM_RESTART_TABLE")
 
     # restart_count for each process in SWSS should be 2
     keys = warmtbl.getKeys()

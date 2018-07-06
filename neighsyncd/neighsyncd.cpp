@@ -4,6 +4,7 @@
 #include "netdispatcher.h"
 #include "netlink.h"
 #include "neighsyncd/neighsync.h"
+#include "warm_restart.h"
 #include <time.h>
 
 using namespace std;
@@ -17,6 +18,8 @@ int main(int argc, char **argv)
     RedisPipeline pipelineAppDB(&appDb);
     DBConnector confDb(CONFIG_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
     RedisPipeline pipelineConfDB(&confDb);
+
+    checkWarmStart(&appDb, "neighsyncd");
 
     NeighSync sync(&pipelineAppDB, &pipelineConfDB);
 
@@ -35,15 +38,15 @@ int main(int argc, char **argv)
             netlink.dumpRequest(RTM_GETNEIGH);
 
             s.addSelectable(&netlink);
-	    sync.readTableToMap();
+            sync.readTableToMap();
             while (true)
             {
                 Selectable *temps;
                 s.select(&temps, SELECT_TIMEOUT);
-		if (sync.checkReconcile())
-		{
-		    sync.reconcile(sync.get_ps_table());
-		}
+                if (sync.checkReconcile())
+                {
+                    sync.reconcile(sync.get_ps_table());
+                }
             }
         }
         catch (const std::exception& e)
