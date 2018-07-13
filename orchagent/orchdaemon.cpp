@@ -287,7 +287,9 @@ void OrchDaemon::start()
         m_select->addSelectables(o->getSelectables());
     }
 
-    static bool restored = true;
+    bool restored = true;
+    set<Executor *> executorSet;
+
     if (isWarmStart())
     {
         restored = false;
@@ -326,6 +328,15 @@ void OrchDaemon::start()
         {
             c->execute();
         }
+        else
+        {
+            if (executorSet.find(c) == executorSet.end())
+            {
+                executorSet.insert(c);
+                SWSS_LOG_NOTICE("Task for table %s is being postponed after state restore",
+                        c->getTableName().c_str());
+            }
+        }
 
         /* After each iteration, periodically check all m_toSync map to
          * execute all the remaining tasks that need to be retried. */
@@ -342,9 +353,9 @@ void OrchDaemon::start()
         if (!restored && gPortsOrch->isInitDone())
         {
             /*
-            * drain LAG_MEMBER_TABLE and VLAN_MEMBER_TABLE since they
-            * were checked before LAG_TABLE and VLAN_TABLE previously.
-            */
+             * drain LAG_MEMBER_TABLE and VLAN_MEMBER_TABLE since they
+             * were checked before LAG_TABLE and VLAN_TABLE previously.
+             */
             for (Orch *o : m_orchList)
             {
                 o->doTask();
@@ -355,6 +366,8 @@ void OrchDaemon::start()
                 string  tableName = "";
                 if (!o->isEmpty(tableName))
                 {
+                    // TODO: change it to fatal once staged ProducerStateTable/ConsumerStateTable change and
+                    // pre-warmStart consistency validation are ready.
                     SWSS_LOG_ERROR("task for %s is not empty", tableName.c_str());
                     vector<string> ts;
                     o->dumpTasks(ts);
@@ -364,9 +377,25 @@ void OrchDaemon::start()
                     }
                 }
             }
+            SWSS_LOG_NOTICE("Orchagent state restore done");
             gPortsOrch->syncUpPortState();
             gFdbOrch->syncUpFdb();
             restored = true;
+
+            /* Pick up those tasks postponed by restore processing */
+            if(!executorSet.empty())
+            {
+                for (Executor *c : executorSet)
+                {
+                    c->execute();
+                    SWSS_LOG_NOTICE("Postponed task for table %s is being processed", c->getTableName().c_str());
+                }
+                for (Orch *o : m_orchList)
+                {
+                    o->doTask();
+                }
+            }
+
         }
     }
 }
