@@ -89,12 +89,16 @@ public:
     Executor& operator=(const Executor&) = delete;
 
     // Execute on event happening
-    virtual void execute() { }
+    virtual void execute(bool apply=true) { }
     virtual void drain() { }
 
     virtual string getTableName() const
     {
         return "";
+    }
+    virtual int getDbId() const
+    {
+        return -1;
     }
     virtual bool isEmpty()
     {
@@ -130,13 +134,18 @@ public:
         return getConsumerTable()->getTableName();
     }
 
+    int getDbId() const
+    {
+        return getConsumerTable()->getDbId();
+    }
+
     bool isEmpty()
     {
         return (m_toSync.size() == 0);
     }
     void dumpTasks(vector<string> &ts);
     void addToSync(std::deque<KeyOpFieldsValuesTuple> &entries);
-    void execute();
+    void execute(bool apply=true);
     void drain();
 
     /* Store the latest 'golden' status */

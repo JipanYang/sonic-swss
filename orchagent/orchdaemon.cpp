@@ -321,10 +321,13 @@ void OrchDaemon::start()
 
         auto *c = (Executor *)s;
         /*
-         * Don't process any new request other than APP PORT_TABLE
+         * Don't process any new data other than from APP PORT_TABLE or ConfigDB
          * before restore is finished.
+         * stateDbLagTable is a special case, create/delete of LAG is controlled
+         * from configDB. It is assumed that no configDB change during warm restart.
          */
-        if (restored || c->getTableName() == APP_PORT_TABLE_NAME)
+        if (restored || c->getTableName() == APP_PORT_TABLE_NAME ||
+                (c->getDbId() == CONFIG_DB || c->getDbId() == STATE_DB))
         {
             c->execute();
         }
@@ -387,8 +390,16 @@ void OrchDaemon::start()
             {
                 for (Executor *c : executorSet)
                 {
-                    c->execute();
+                    c->execute(false);
                     SWSS_LOG_NOTICE("Postponed task for table %s is being processed", c->getTableName().c_str());
+
+                    vector<string> ts;
+                    c->dumpTasks(ts);
+                    SWSS_LOG_NOTICE("Postponed tasks: ");
+                    for(auto &s : ts)
+                    {
+                        SWSS_LOG_NOTICE("%s", s.c_str());
+                    }
                 }
                 for (Orch *o : m_orchList)
                 {

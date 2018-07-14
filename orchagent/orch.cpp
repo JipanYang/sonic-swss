@@ -122,7 +122,7 @@ void Consumer::addToSync(std::deque<KeyOpFieldsValuesTuple> &entries)
     }
 }
 
-void Consumer::execute()
+void Consumer::execute(bool apply)
 {
     SWSS_LOG_ENTER();
 
@@ -131,7 +131,8 @@ void Consumer::execute()
 
     addToSync(entries);
 
-    drain();
+    if (apply)
+        drain();
 }
 
 void Consumer::drain()
