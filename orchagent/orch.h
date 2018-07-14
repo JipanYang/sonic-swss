@@ -94,7 +94,11 @@ public:
 
     virtual string getTableName() const
     {
-        return "";
+        return m_name;
+    }
+    virtual void setName(string name)
+    {
+        m_name = name;
     }
     virtual int getDbId() const
     {
@@ -112,6 +116,7 @@ public:
 protected:
     Selectable *m_selectable;
     Orch *m_orch;
+    string m_name;
 
     // Get the underlying selectable
     Selectable *getSelectable() const { return m_selectable; }

@@ -169,6 +169,7 @@ CrmOrch::CrmOrch(DBConnector *db, string tableName):
     }
 
     auto executor = new ExecutableTimer(m_timer.get(), this);
+    executor->setName("CRM_COUNTERS_POLL");
     Orch::addExecutor("CRM_COUNTERS_POLL", executor);
     m_timer->start();
 }
