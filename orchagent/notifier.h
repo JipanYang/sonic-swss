@@ -12,7 +12,7 @@ public:
         return static_cast<NotificationConsumer *>(getSelectable());
     }
 
-    void execute()
+    void execute(bool apply=true)
     {
         m_orch->doTask(*getNotificationConsumer());
     }
