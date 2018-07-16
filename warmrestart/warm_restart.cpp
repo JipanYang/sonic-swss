@@ -15,7 +15,7 @@ bool isWarmStart()
 }
 
 // Check warm start flag at the very begining of application, do it once for each process.
-void checkWarmStart(DBConnector *db, std::string app_name)
+void checkWarmStart(DBConnector *db, const std::string &app_name)
 {
     std::unique_ptr<Table>  warmStartTable = std::unique_ptr<Table>(new Table(db, APP_WARM_RESTART_TABLE_NAME));
     std::vector<FieldValueTuple> vfv;
@@ -38,6 +38,11 @@ void checkWarmStart(DBConnector *db, std::string app_name)
                 break;
             }
         }
+        // Clear the state_restored flag
+        std::vector<FieldValueTuple> tmp;
+        FieldValueTuple tuple("state_restored", "0");
+        tmp.push_back(tuple);
+        warmStartTable->set(app_name, tmp);
     }
 
     // For cold start, the whole appl db will be flushed including warm start table.
@@ -49,4 +54,22 @@ void checkWarmStart(DBConnector *db, std::string app_name)
         vfv.push_back(tuple);
         warmStartTable->set(app_name, vfv);
     }
+
+}
+
+// Set the state restored flag
+void setWarmStartRestoreState(DBConnector *db, const std::string &app_name, bool restored)
+{
+    std::unique_ptr<Table>  warmStartTable = std::unique_ptr<Table>(new Table(db, APP_WARM_RESTART_TABLE_NAME));
+    // Set the state_restored flag
+    std::vector<FieldValueTuple> tmp;
+    std::string state = "0";
+
+    if (restored)
+    {
+        state = "1";
+    }
+    FieldValueTuple tuple("state_restored", state);
+    tmp.push_back(tuple);
+    warmStartTable->set(app_name, tmp);
 }

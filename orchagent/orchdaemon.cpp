@@ -293,6 +293,7 @@ void OrchDaemon::start()
     if (isWarmStart())
     {
         restored = false;
+        setWarmStartRestoreState(m_applDb, "orchagent", false);
     }
 
     while (true)
@@ -364,22 +365,27 @@ void OrchDaemon::start()
                 o->doTask();
             }
 
-            for (Orch *o : m_orchList)
+            /*
+             * No pending task should exist for any of the consumer at this point.
+             * All the prexisting data in appDB and configDb have been read and processed.
+             */
+            vector<string> ts;
+            getTaskToSync(ts);
+            if (ts.size() != 0)
             {
-                string  tableName = "";
-                if (!o->isEmpty(tableName))
+                // TODO: change it to fatal once staged ProducerStateTable/ConsumerStateTable change and
+                // pre-warmStart consistency validation are ready.
+                SWSS_LOG_ERROR("There are pending consumer tasks after restore: ");
+                for(auto &s : ts)
                 {
-                    // TODO: change it to fatal once staged ProducerStateTable/ConsumerStateTable change and
-                    // pre-warmStart consistency validation are ready.
-                    SWSS_LOG_ERROR("task for %s is not empty", tableName.c_str());
-                    vector<string> ts;
-                    o->dumpTasks(ts);
-                    for(auto &s : ts)
-                    {
-                        SWSS_LOG_ERROR("%s", s.c_str());
-                    }
+                    SWSS_LOG_ERROR("%s", s.c_str());
                 }
             }
+            else
+            {
+                setWarmStartRestoreState(m_applDb, "orchagent", true);
+            }
+
             SWSS_LOG_NOTICE("Orchagent state restore done");
             gPortsOrch->syncUpPortState();
             gFdbOrch->syncUpFdb();
@@ -408,5 +414,16 @@ void OrchDaemon::start()
             }
 
         }
+    }
+}
+
+/*
+ * Get tasks to sync for consumers of each orch being managed by this orch daemon
+ */
+void OrchDaemon::getTaskToSync(vector<string> &ts)
+{
+    for (Orch *o : m_orchList)
+    {
+        o->dumpTasks(ts);
     }
 }
