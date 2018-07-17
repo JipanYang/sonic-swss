@@ -144,7 +144,7 @@ void SwitchOrch::doTask(NotificationConsumer& consumer)
         return;
     }
 
-    SWSS_LOG_NOTICE("Notification for %s", op.c_str());
+    SWSS_LOG_NOTICE("RESTARTCHECK notification for %s ", op.c_str());
     if (op == "orchagent")
     {
         checkRestartReadyState = true;

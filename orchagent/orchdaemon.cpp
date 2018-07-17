@@ -319,21 +319,6 @@ void OrchDaemon::start()
              * requests live in it. When the daemon has nothing to do, it
              * is a good chance to flush the pipeline  */
             flush();
-
-            if (gSwitchOrch->checkRestartReady())
-            {
-                vector<string> ts;
-                getTaskToSync(ts);
-                bool ret = gSwitchOrch->updateWarmRestartCheck(ts);
-                if (ts.size() == 0 && ret)
-                {
-                    // No pending task, stop processing any new db data.
-                    // Should sleep here or continue handling timers and etc.??
-                    SWSS_LOG_WARN("Orchagent is freezed for warm restart!");
-                    sleep(UINT_MAX);
-                }
-            }
-
             continue;
         }
 
@@ -429,7 +414,25 @@ void OrchDaemon::start()
                     o->doTask();
                 }
             }
+        }
 
+        /*
+         * Asked to check warm restart readiness.
+         * Not doing this under Select::TIMEOUT condition because of
+         * the existence of finer granularity ExecutableTimer with select
+         */
+        if (gSwitchOrch->checkRestartReady() && restored)
+        {
+            vector<string> ts;
+            getTaskToSync(ts);
+            bool ret = gSwitchOrch->updateWarmRestartCheck(ts);
+            if (ts.size() == 0 && ret)
+            {
+                // No pending task, stop processing any new db data.
+                // Should sleep here or continue handling timers and etc.??
+                SWSS_LOG_WARN("Orchagent is freezed for warm restart!");
+                sleep(UINT_MAX);
+            }
         }
     }
 }

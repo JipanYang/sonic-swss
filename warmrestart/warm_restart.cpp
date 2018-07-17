@@ -58,11 +58,11 @@ void setWarmStartRestoreState(DBConnector *db, const std::string &app_name, bool
     std::unique_ptr<Table>  warmStartTable = std::unique_ptr<Table>(new Table(db, APP_WARM_RESTART_TABLE_NAME));
     // Set the state_restored flag
     std::vector<FieldValueTuple> tmp;
-    std::string state = "0";
+    std::string state = "false";
 
     if (restored)
     {
-        state = "1";
+        state = "true";
     }
     FieldValueTuple tuple("state_restored", state);
     tmp.push_back(tuple);
