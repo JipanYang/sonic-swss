@@ -3,6 +3,7 @@
 #include "orchdaemon.h"
 #include "logger.h"
 #include <sairedis.h>
+#include <limits.h>
 
 #define SAI_SWITCH_ATTR_CUSTOM_RANGE_BASE SAI_SWITCH_ATTR_CUSTOM_RANGE_START
 #include "sairedis.h"
@@ -27,6 +28,7 @@ RouteOrch *gRouteOrch;
 AclOrch *gAclOrch;
 CrmOrch *gCrmOrch;
 BufferOrch *gBufferOrch;
+SwitchOrch *gSwitchOrch;
 
 OrchDaemon::OrchDaemon(DBConnector *applDb, DBConnector *configDb, DBConnector *stateDb) :
         m_applDb(applDb),
@@ -49,7 +51,7 @@ bool OrchDaemon::init()
 
     string platform = getenv("platform") ? getenv("platform") : "";
 
-    SwitchOrch *switch_orch = new SwitchOrch(m_applDb, APP_SWITCH_TABLE_NAME);
+    gSwitchOrch = new SwitchOrch(m_applDb, APP_SWITCH_TABLE_NAME);
 
     const int portsorch_base_pri = 40;
 
@@ -317,12 +319,27 @@ void OrchDaemon::start()
              * requests live in it. When the daemon has nothing to do, it
              * is a good chance to flush the pipeline  */
             flush();
+
+            if (gSwitchOrch->checkRestartReady())
+            {
+                vector<string> ts;
+                getTaskToSync(ts);
+                bool ret = gSwitchOrch->updateWarmRestartCheck(ts);
+                if (ts.size() == 0 && ret)
+                {
+                    // No pending task, stop processing any new db data.
+                    // Should sleep here or continue handling timers and etc.??
+                    SWSS_LOG_WARN("Orchagent is freezed for warm restart!");
+                    sleep(UINT_MAX);
+                }
+            }
+
             continue;
         }
 
         auto *c = (Executor *)s;
         /*
-         * Don't process any new data other than from APP PORT_TABLE or ConfigDB
+         * Don't process any new data other than those from APP PORT_TABLE or ConfigDB
          * before restore is finished.
          * stateDbLagTable is a special case, create/delete of LAG is controlled
          * from configDB. It is assumed that no configDB change during warm restart.

@@ -2,6 +2,8 @@
 
 #include "switchorch.h"
 #include "converter.h"
+#include "notifier.h"
+#include "notificationproducer.h"
 
 using namespace std;
 using namespace swss;
@@ -27,8 +29,13 @@ const map<string, sai_packet_action_t> packet_action_map =
 };
 
 SwitchOrch::SwitchOrch(DBConnector *db, string tableName) :
-        Orch(db, tableName)
+        Orch(db, tableName),
+        m_db(db)
 {
+    m_restartCheckNotificationConsumer = new NotificationConsumer(db, "RESTARTCHECK");
+    auto restartCheckNotifier = new Notifier(m_restartCheckNotificationConsumer, this);
+    restartCheckNotifier->setName("RESTARTCHECK");
+    Orch::addExecutor("", restartCheckNotifier);
 }
 
 void SwitchOrch::doTask(Consumer &consumer)
@@ -122,3 +129,51 @@ void SwitchOrch::doTask(Consumer &consumer)
     }
 }
 
+void SwitchOrch::doTask(NotificationConsumer& consumer)
+{
+    SWSS_LOG_ENTER();
+
+    std::string op;
+    std::string data;
+    std::vector<swss::FieldValueTuple> values;
+
+    consumer.pop(op, data, values);
+
+    if (&consumer != m_restartCheckNotificationConsumer)
+    {
+        return;
+    }
+
+    SWSS_LOG_NOTICE("Notification for %s", op.c_str());
+    if (op == "orchagent")
+    {
+        checkRestartReadyState = true;
+    }
+}
+
+
+bool SwitchOrch::updateWarmRestartCheck(const vector<string> &ts)
+{
+    checkRestartReadyState = false;
+
+    NotificationProducer restartRequestReply(m_db, "RESTARTCHECKREPLY");
+    std::vector<swss::FieldValueTuple> values;
+    std::string op = "READY";
+    bool ret = true;
+
+    if (ts.size() != 0)
+    {
+        SWSS_LOG_ERROR("WarmRestart not ready with pending tasks: ");
+        for(auto &s : ts)
+        {
+            SWSS_LOG_NOTICE("%s", s.c_str());
+        }
+        op = "NOT_READY";
+        ret = false;
+    }
+
+    SWSS_LOG_NOTICE("Restart check result: %s", op.c_str());
+
+    restartRequestReply.send(op, op, values);
+    return ret;
+}

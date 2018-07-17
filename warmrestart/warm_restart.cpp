@@ -38,11 +38,6 @@ void checkWarmStart(DBConnector *db, const std::string &app_name)
                 break;
             }
         }
-        // Clear the state_restored flag
-        std::vector<FieldValueTuple> tmp;
-        FieldValueTuple tuple("state_restored", "0");
-        tmp.push_back(tuple);
-        warmStartTable->set(app_name, tmp);
     }
 
     // For cold start, the whole appl db will be flushed including warm start table.
