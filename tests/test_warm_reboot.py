@@ -4,6 +4,37 @@ import re
 import time
 import json
 
+def test_OrchagentWarmRestartReadyCheck(dvs):
+
+    dvs.runcmd("ifconfig Ethernet0 10.0.0.0/31 up")
+    dvs.runcmd("ifconfig Ethernet4 10.0.0.2/31 up")
+
+    dvs.servers[0].runcmd("ifconfig eth0 10.0.0.1/31")
+    dvs.servers[0].runcmd("ip route add default via 10.0.0.0")
+
+    dvs.servers[1].runcmd("ifconfig eth0 10.0.0.3/31")
+    dvs.servers[1].runcmd("ip route add default via 10.0.0.2")
+
+
+    db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
+    ps = swsscommon.ProducerStateTable(db, "ROUTE_TABLE")
+    fvs = swsscommon.FieldValuePairs([("nexthop","10.0.0.1"), ("ifname", "Ethernet0")])
+
+    ps.set("2.2.2.0/24", fvs)
+
+    time.sleep(1)
+    #
+    result =  dvs.runcmd("/usr/bin/orchagent_restart_check")
+    assert result == "RESTARTCHECK failed\n"
+
+    # get neighbor and arp entry
+    dvs.servers[0].runcmd("ping -c 1 10.0.0.3")
+
+    time.sleep(1)
+    result =  dvs.runcmd("/usr/bin/orchagent_restart_check")
+    assert result == "RESTARTCHECK succeeded\n"
+
+
 def test_swss_warm_restore(dvs):
 
     # syncd warm start with temp view not supported yet
