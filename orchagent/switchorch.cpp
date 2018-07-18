@@ -151,8 +151,9 @@ void SwitchOrch::doTask(NotificationConsumer& consumer)
     }
 }
 
-
-bool SwitchOrch::updateWarmRestartCheck(const vector<string> &ts)
+// Reply with "READY" notification if no pending tasks, and return true.
+// Ortherwise reply with "NOT_READY" notification and return false.
+bool SwitchOrch::warmRestartCheckReply(const vector<string> &ts)
 {
     checkRestartReadyState = false;
 

@@ -7,7 +7,7 @@ class SwitchOrch : public Orch
 public:
     SwitchOrch(DBConnector *db, string tableName);
     bool checkRestartReady() { return checkRestartReadyState; }
-    bool updateWarmRestartCheck(const vector<string> &ts);
+    bool warmRestartCheckReply(const vector<string> &ts);
 
 private:
     void doTask(Consumer &consumer);

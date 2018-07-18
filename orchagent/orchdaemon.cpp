@@ -290,8 +290,9 @@ void OrchDaemon::start()
     }
 
     bool restored = true;
+    // executorSet stores all Executors which have data/task to be processed
+    // after state restore phase of warm start.
     set<Executor *> executorSet;
-
     if (isWarmStart())
     {
         restored = false;
@@ -325,7 +326,7 @@ void OrchDaemon::start()
         auto *c = (Executor *)s;
         /*
          * Don't process any new data other than those from APP PORT_TABLE or ConfigDB
-         * before restore is finished.
+         * before state restore is finished.
          * stateDbLagTable is a special case, create/delete of LAG is controlled
          * from configDB. It is assumed that no configDB change during warm restart.
          */
@@ -425,12 +426,12 @@ void OrchDaemon::start()
         {
             vector<string> ts;
             getTaskToSync(ts);
-            bool ret = gSwitchOrch->updateWarmRestartCheck(ts);
+            bool ret = gSwitchOrch->warmRestartCheckReply(ts);
             if (ts.size() == 0 && ret)
             {
                 // No pending task, stop processing any new db data.
                 // Should sleep here or continue handling timers and etc.??
-                SWSS_LOG_WARN("Orchagent is freezed for warm restart!");
+                SWSS_LOG_WARN("Orchagent is frozen for warm restart!");
                 sleep(UINT_MAX);
             }
         }

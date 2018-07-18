@@ -12,9 +12,7 @@
 int main(int argc, char **argv)
 {
     swss::Logger::getInstance().setMinPrio(swss::Logger::SWSS_NOTICE);
-
     SWSS_LOG_ENTER();
-
 
     std::string op = "orchagent";
 
@@ -38,7 +36,7 @@ int main(int argc, char **argv)
         restartQueryReply.pop(op_ret, data, values);
         if (op_ret == "READY")
         {
-            SWSS_LOG_NOTICE("RESTARTCHECK success, %s is freezed and ready for warm restart", op.c_str());
+            SWSS_LOG_NOTICE("RESTARTCHECK success, %s is frozen and ready for warm restart", op.c_str());
             std::cout << "RESTARTCHECK succeeded" << std::endl;
             return EXIT_SUCCESS;
         }
