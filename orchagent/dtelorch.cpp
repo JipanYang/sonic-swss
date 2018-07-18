@@ -5,6 +5,7 @@
 #include "converter.h"
 #include "ipprefix.h"
 #include "swssnet.h"
+#include "sairedis.h"
 
 using namespace std;
 using namespace swss;
@@ -31,7 +32,9 @@ DTelOrch::DTelOrch(DBConnector *db, vector<string> tableNames, PortsOrch *portOr
     SWSS_LOG_ENTER();
     sai_attribute_t attr;
 
+    SET_OBJ_OWNER("DTEL_");
     sai_status_t status = sai_dtel_api->create_dtel(&dtelId, gSwitchId, 0, {});
+    UNSET_OBJ_OWNER();
     if (status != SAI_STATUS_SUCCESS)
     {
         SWSS_LOG_ERROR("DTEL ERROR: Error creating DTel id");
