@@ -6,6 +6,10 @@ import json
 
 def test_OrchagentWarmRestartReadyCheck(dvs):
 
+    dvs.runcmd("config warm_restart enable swss")
+    # hostcfgd not running in VS, create the folder explicitly
+    dvs.runcmd("mkdir -p /etc/sonic/warm_restart/swss")
+
     dvs.runcmd("ifconfig Ethernet0 10.0.0.0/31 up")
     dvs.runcmd("ifconfig Ethernet4 10.0.0.2/31 up")
 
@@ -44,6 +48,7 @@ def test_swss_warm_restore(dvs):
     dvs.runcmd("/usr/bin/stop_swss.sh")
     time.sleep(3)
     dvs.runcmd("mv /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b")
+    dvs.runcmd("/usr/bin/swss-flushdb")
     dvs.runcmd("/usr/bin/start_swss.sh")
     time.sleep(10)
 
@@ -96,6 +101,7 @@ def test_swss_port_state_syncup(dvs):
     dvs.servers[2].runcmd("ip link set up dev eth0") == 0
 
     time.sleep(1)
+    dvs.runcmd("/usr/bin/swss-flushdb")
     dvs.runcmd("/usr/bin/start_swss.sh")
     time.sleep(10)
 
@@ -246,4 +252,8 @@ def test_swss_fdb_syncup_and_crm(dvs):
      # get counters for FDB entries, it should be 1
     used_counter = getCrmCounterValue(dvs, 'STATS', 'crm_stats_fdb_entry_used')
     assert used_counter == 1
+
+    dvs.runcmd("config warm_restart disable swss")
+    # hostcfgd not running in VS, rm the folder explicitly
+    dvs.runcmd("rm -f -r /etc/sonic/warm_restart/swss")
 
