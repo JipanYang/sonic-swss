@@ -4,6 +4,8 @@ import re
 import time
 import json
 
+# Note: all test cases in this file are supposed to run in sequence together, fow now.
+
 def test_OrchagentWarmRestartReadyCheck(dvs):
 
     dvs.runcmd("config warm_restart enable swss")
@@ -32,7 +34,7 @@ def test_OrchagentWarmRestartReadyCheck(dvs):
     assert result == "RESTARTCHECK failed\n"
 
     # get neighbor and arp entry
-    dvs.servers[0].runcmd("ping -c 1 10.0.0.3")
+    dvs.servers[1].runcmd("ping -c 1 10.0.0.1")
 
     time.sleep(1)
     result =  dvs.runcmd("/usr/bin/orchagent_restart_check")
@@ -185,7 +187,7 @@ def test_swss_fdb_syncup_and_crm(dvs):
     # create a FDB entry in Application DB
     create_entry_pst(
         appl_db,
-        "FDB_TABLE", "Vlan2:52-54-00-25-06-E9",
+        "FDB_TABLE", "Vlan12:52-54-00-25-06-E9",
         [
             ("port", "Ethernet12"),
             ("type", "dynamic"),
@@ -194,16 +196,16 @@ def test_swss_fdb_syncup_and_crm(dvs):
     # create vlan
     create_entry_tbl(
         conf_db,
-        "VLAN", "Vlan2",
+        "VLAN", "Vlan12",
         [
-            ("vlanid", "2"),
+            ("vlanid", "12"),
         ]
     )
 
     # create vlan member entry in application db. Don't use Ethernet0/4/8 as IP configured on them in previous testing.
     create_entry_tbl(
         conf_db,
-        "VLAN_MEMBER", "Vlan2|Ethernet12",
+        "VLAN_MEMBER", "Vlan12|Ethernet12",
          [
             ("tagging_mode", "untagged"),
          ]
@@ -224,7 +226,7 @@ def test_swss_fdb_syncup_and_crm(dvs):
 
     # delete the FDB entry in AppDB before swss is started again,
     # the orchagent is supposed to sync up the entry from ASIC DB after warm restart
-    del_entry_tbl(appl_db, "FDB_TABLE", "Vlan2:52-54-00-25-06-E9")
+    del_entry_tbl(appl_db, "FDB_TABLE", "Vlan12:52-54-00-25-06-E9")
 
 
     time.sleep(1)
@@ -252,6 +254,117 @@ def test_swss_fdb_syncup_and_crm(dvs):
      # get counters for FDB entries, it should be 1
     used_counter = getCrmCounterValue(dvs, 'STATS', 'crm_stats_fdb_entry_used')
     assert used_counter == 1
+
+
+def test_VlanMgrWarmRestart(dvs):
+
+    conf_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
+    appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
+
+    dvs.runcmd("ifconfig Ethernet16  up")
+    dvs.runcmd("ifconfig Ethernet20  up")
+
+    # create vlan
+    create_entry_tbl(
+        conf_db,
+        "VLAN", "Vlan16",
+        [
+            ("vlanid", "16"),
+        ]
+    )
+    # create vlan
+    create_entry_tbl(
+        conf_db,
+        "VLAN", "Vlan20",
+        [
+            ("vlanid", "20"),
+        ]
+    )
+    # create vlan member entry in config db. Don't use Ethernet0/4/8/12 as IP configured on them in previous testing.
+    create_entry_tbl(
+        conf_db,
+        "VLAN_MEMBER", "Vlan16|Ethernet16",
+         [
+            ("tagging_mode", "untagged"),
+         ]
+    )
+
+    create_entry_tbl(
+        conf_db,
+        "VLAN_MEMBER", "Vlan20|Ethernet20",
+         [
+            ("tagging_mode", "untagged"),
+         ]
+    )
+
+    time.sleep(1)
+
+    dvs.runcmd("ifconfig Vlan16 11.0.0.1/29 up")
+    dvs.runcmd("ifconfig Vlan20 11.0.0.9/29 up")
+
+    dvs.servers[4].runcmd("ifconfig eth0 11.0.0.2/29")
+    dvs.servers[4].runcmd("ip route add default via 11.0.0.1")
+
+    dvs.servers[5].runcmd("ifconfig eth0 11.0.0.10/29")
+    dvs.servers[5].runcmd("ip route add default via 11.0.0.9")
+
+    time.sleep(1)
+
+    # Ping should work between servers via vs vlan interfaces
+    ping_stats = dvs.servers[4].runcmd("ping -c 1 11.0.0.10")
+    time.sleep(1)
+
+    tbl = swsscommon.Table(appl_db, "NEIGH_TABLE")
+    (status, fvs) = tbl.get("Vlan16:11.0.0.2")
+    assert status == True
+
+    (status, fvs) = tbl.get("Vlan20:11.0.0.10")
+    assert status == True
+
+
+    bv_before = dvs.runcmd("bridge vlan")
+    print(bv_before)
+
+   # dvs.runcmd("pkill -x vlanmgrd")
+    #dvs.runcmd("cp /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b; echo > /var/log/swss/sairedis.rec")
+    dvs.runcmd(['sh', '-c', 'pkill -x vlanmgrd; cp /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b; echo > /var/log/swss/sairedis.rec'])
+    dvs.runcmd("supervisorctl start vlanmgrd")
+    time.sleep(2)
+
+    bv_after = dvs.runcmd("bridge vlan")
+    assert bv_after == bv_before
+
+     # No create/set/remove operations should be passed down to syncd for vlanmgr warm restart
+    num = dvs.runcmd(['sh', '-c', 'grep \|c\| /var/log/swss/sairedis.rec | wc -l'])
+    assert num == '0\n'
+    num = dvs.runcmd(['sh', '-c', 'grep \|s\| /var/log/swss/sairedis.rec | wc -l'])
+    assert num == '0\n'
+    num = dvs.runcmd(['sh', '-c', 'grep \|r\| /var/log/swss/sairedis.rec | wc -l'])
+    assert num == '0\n'
+
+    #new ip on server 5
+    dvs.servers[5].runcmd("ifconfig eth0 11.0.0.11/29")
+
+    # Ping should work between servers via vs vlan interfaces
+    ping_stats = dvs.servers[4].runcmd("ping -c 1 11.0.0.11")
+
+    # new neighbor learn on VS
+    (status, fvs) = tbl.get("Vlan20:11.0.0.11")
+    assert status == True
+
+    # restart_count for each process in vlanmgr should be 4 now
+    warmtbl = swsscommon.Table(appl_db, "WARM_START_TABLE")
+    keys = warmtbl.getKeys()
+    for key in keys:
+        if key != "vlanmgrd":
+            continue
+        (status, fvs) = warmtbl.get(key)
+        assert status == True
+        for fv in fvs:
+            if fv[0] == "restart_count":
+                assert fv[1] == "4"
+            elif fv[0] == "state_restored":
+                assert fv[1] == "true"
 
     dvs.runcmd("config warm_restart disable swss")
     # hostcfgd not running in VS, rm the folder explicitly
