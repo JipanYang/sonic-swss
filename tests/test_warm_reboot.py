@@ -370,3 +370,245 @@ def test_VlanMgrWarmRestart(dvs):
     # hostcfgd not running in VS, rm the folder explicitly
     dvs.runcmd("rm -f -r /etc/sonic/warm_restart/swss")
 
+
+def check_restart_cnt(warmtbl, restart_cnt):
+    keys = warmtbl.getKeys()
+    print(keys)
+    for key in keys:
+        (status, fvs) = warmtbl.get(key)
+        assert status == True
+        for fv in fvs:
+            if fv[0] == "restart_count":
+                assert fv[1] == str(restart_cnt)
+            elif fv[0] == "state_restored":
+                assert fv[1] == "true"
+
+def test_swss_neighbor_syncup(dvs):
+    # syncd warm start with temp view not supported yet
+    if dvs.tmpview == True:
+        return
+
+    restart_cnt = 4
+    # Prepare neighbor entry before swss stop
+    appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
+    asic_db = swsscommon.DBConnector(swsscommon.ASIC_DB, dvs.redis_sock, 0)
+    conf_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
+
+    # create neighbor entries (4 ipv4 and 4 ip6, two each on each interface) in linux kernel
+    intfs = ["Ethernet12", "Ethernet16"]
+    #enable ipv6 on docker
+    dvs.runcmd("sysctl net.ipv6.conf.all.disable_ipv6=0")
+
+    dvs.runcmd("ifconfig {} 12.0.0.1/24 up".format(intfs[0]))
+    dvs.runcmd("ip -6 addr add 1200::1/64 dev {}".format(intfs[0]))
+
+    dvs.runcmd("ifconfig {} 16.0.0.1/24 up".format(intfs[1]))
+    dvs.runcmd("ip -6 addr add 1600::1/64 dev {}".format(intfs[1]))
+
+    ips = ["12.0.0.2", "12.0.0.3", "16.0.0.2", "16.0.0.3"]
+    v6ips = ["1200::2", "1200::3", "1600::2", "1600::3"]
+
+    macs = ["00:00:00:00:12:02", "00:00:00:00:12:03", "00:00:00:00:16:02", "00:00:00:00:16:03"]
+
+    for i in range(len(ips)):
+        dvs.runcmd("ip neigh add {} dev {} lladdr {}".format(ips[i], intfs[i%2], macs[i]))
+
+    for i in range(len(v6ips)):
+        dvs.runcmd("ip -6 neigh add {} dev {} lladdr {}".format(v6ips[i], intfs[i%2], macs[i]))
+
+    time.sleep(1)
+
+    # Check the neighbor entries are inserted correctly
+    db = swsscommon.DBConnector(0, dvs.redis_sock, 0)
+    tbl = swsscommon.Table(db, "NEIGH_TABLE")
+
+    for i in range(len(ips)):
+        (status, fvs) = tbl.get("{}:{}".format(intfs[i%2], ips[i]))
+        assert status == True
+
+        for v in fvs:
+            if v[0] == "neigh":
+                assert v[1] == macs[i]
+            if v[0] == "family":
+                assert v[1] == "IPv4"
+
+    for i in range(len(v6ips)):
+        (status, fvs) = tbl.get("{}:{}".format(intfs[i%2], v6ips[i]))
+        assert status == True
+
+        for v in fvs:
+            if v[0] == "neigh":
+                assert v[1] == macs[i]
+            if v[0] == "family":
+                assert v[1] == "IPv6"
+
+    # testcase 1:
+    # delete even nummber of ipv4/ipv6 neighbor entries from each interface
+    # note: there was an issue for neighbor delete, it will be marked as FAILED instead of deleted in kernel
+    #       but it will send netlink message to remove from appDB, so it works ok here,
+    #       just that if we want to add the same neighbor again, use "change" instead of "add"
+    # the neighsyncd is supposed to sync up the entries from kernel after warm restart
+
+    #stop swss docker
+    dvs.runcmd("/usr/bin/stop_swss.sh")
+
+    for i in range(0, len(ips), 2):
+        dvs.runcmd("ip neigh del {} dev {}".format(ips[i], intfs[i%2]))
+
+    for i in range(0, len(v6ips), 2):
+        dvs.runcmd("ip -6 neigh del {} dev {}".format(v6ips[i], intfs[i%2]))
+
+    # start swss docker again
+    time.sleep(1)
+    dvs.runcmd("/usr/bin/start_swss.sh")
+    time.sleep(10)
+
+    # check restart_count for each process in SWSS
+    restart_cnt+=1
+    warmtbl = swsscommon.Table(appl_db, "WARM_START_TABLE")
+    check_restart_cnt(warmtbl, restart_cnt)
+
+    # check ipv4 and ipv6 neighbors
+    for i in range(len(ips)):
+        (status, fvs) = tbl.get("{}:{}".format(intfs[i%2], ips[i]))
+        #should not see deleted neighbor entries
+        if i %2 == 0:
+            assert status == False
+            continue
+        else:
+            assert status == True
+
+        #undeleted entries should still be there.
+        for v in fvs:
+            if v[0] == "neigh":
+                assert v[1] == macs[i]
+            if v[0] == "family":
+                assert v[1] == "IPv4"
+
+    for i in range(len(v6ips)):
+        (status, fvs) = tbl.get("{}:{}".format(intfs[i%2], v6ips[i]))
+        #should not see deleted neighbor entries
+        if i %2 == 0:
+            assert status == False
+            continue
+        else:
+            assert status == True
+
+        #undeleted entries should still be there.
+        for v in fvs:
+            if v[0] == "neigh":
+                assert v[1] == macs[i]
+            if v[0] == "family":
+                assert v[1] == "IPv6"
+
+    # testcase 2:
+    # add even nummber of ipv4/ipv6 neighbor entries to each interface again, use "change" due to the kernel behaviour
+    # the neighsyncd is supposed to sync up the entries from kernel after warm restart
+
+    #stop swss docker
+    dvs.runcmd("/usr/bin/stop_swss.sh")
+
+    for i in range(0, len(ips), 2):
+        dvs.runcmd("ip neigh change {} dev {} lladdr {}".format(ips[i], intfs[i%2], macs[i]))
+
+    for i in range(0, len(v6ips), 2):
+        dvs.runcmd("ip -6 neigh change {} dev {} lladdr {}".format(v6ips[i], intfs[i%2], macs[i]))
+
+    # start swss docker again
+    time.sleep(1)
+    dvs.runcmd("/usr/bin/start_swss.sh")
+    time.sleep(10)
+
+    # check restart_count for each process in SWSS
+    restart_cnt+=1
+    check_restart_cnt(warmtbl, restart_cnt)
+
+    # check ipv4 and ipv6 neighbors, should see all neighbors
+    for i in range(len(ips)):
+        (status, fvs) = tbl.get("{}:{}".format(intfs[i%2], ips[i]))
+        assert status == True
+        for v in fvs:
+            if v[0] == "neigh":
+                assert v[1] == macs[i]
+            if v[0] == "family":
+                assert v[1] == "IPv4"
+
+    for i in range(len(v6ips)):
+        (status, fvs) = tbl.get("{}:{}".format(intfs[i%2], v6ips[i]))
+        assert status == True
+        for v in fvs:
+            if v[0] == "neigh":
+                assert v[1] == macs[i]
+            if v[0] == "family":
+                assert v[1] == "IPv6"
+
+    # testcase3:
+    # Even number of ip4/6 neigbors updated with new mac.
+    # Odd number of ipv4/6 neighbors updated with different interface.
+    # neighbor syncd should sync it up after warm restart
+
+    #stop swss docker
+    dvs.runcmd("/usr/bin/stop_swss.sh")
+
+    newmacs = ["00:00:00:01:12:02", "00:00:00:01:12:03", "00:00:00:01:16:02", "00:00:00:01:16:03"]
+
+    for i in range(len(ips)):
+        if i % 2 == 0:
+            dvs.runcmd("ip neigh change {} dev {} lladdr {}".format(ips[i], intfs[i%2], newmacs[i]))
+        else:
+            dvs.runcmd("ip neigh del {} dev {}".format(ips[i], intfs[i%2]))
+            dvs.runcmd("ip neigh add {} dev {} lladdr {}".format(ips[i], intfs[1-i%2], macs[i]))
+
+    for i in range(len(v6ips)):
+        if i % 2 == 0:
+            dvs.runcmd("ip -6 neigh change {} dev {} lladdr {}".format(v6ips[i], intfs[i%2], newmacs[i]))
+        else:
+            dvs.runcmd("ip -6 neigh del {} dev {}".format(v6ips[i], intfs[i%2]))
+            dvs.runcmd("ip -6 neigh add {} dev {} lladdr {}".format(v6ips[i], intfs[1-i%2], macs[i]))
+
+    # start swss docker again
+    time.sleep(1)
+    dvs.runcmd("/usr/bin/start_swss.sh")
+    time.sleep(10)
+
+    # check restart_count for each process in SWSS
+    restart_cnt += 1
+    check_restart_cnt(warmtbl, restart_cnt)
+
+    # check ipv4 and ipv6 neighbors, should see all neighbors
+    for i in range(len(ips)):
+        if i % 2 == 0:
+            (status, fvs) = tbl.get("{}:{}".format(intfs[i%2], ips[i]))
+            assert status == True
+            for v in fvs:
+                if v[0] == "neigh":
+                    assert v[1] == newmacs[i]
+                if v[0] == "family":
+                    assert v[1] == "IPv4"
+        else:
+            (status, fvs) = tbl.get("{}:{}".format(intfs[1-i%2], ips[i]))
+            assert status == True
+            for v in fvs:
+                if v[0] == "neigh":
+                    assert v[1] == macs[i]
+                if v[0] == "family":
+                    assert v[1] == "IPv4"
+
+    for i in range(len(v6ips)):
+        if i % 2 == 0:
+            (status, fvs) = tbl.get("{}:{}".format(intfs[i%2], v6ips[i]))
+            assert status == True
+            for v in fvs:
+                if v[0] == "neigh":
+                    assert v[1] == newmacs[i]
+                if v[0] == "family":
+                    assert v[1] == "IPv6"
+        else:
+            (status, fvs) = tbl.get("{}:{}".format(intfs[1-i%2], v6ips[i]))
+            assert status == True
+            for v in fvs:
+                if v[0] == "neigh":
+                    assert v[1] == macs[i]
+                if v[0] == "family":
+                    assert v[1] == "IPv6"
+
