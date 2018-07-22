@@ -395,20 +395,20 @@ def test_swss_neighbor_syncup(dvs):
     conf_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
 
     # create neighbor entries (4 ipv4 and 4 ip6, two each on each interface) in linux kernel
-    intfs = ["Ethernet12", "Ethernet16"]
+    intfs = ["Ethernet24", "Ethernet28"]
     #enable ipv6 on docker
     dvs.runcmd("sysctl net.ipv6.conf.all.disable_ipv6=0")
 
-    dvs.runcmd("ifconfig {} 12.0.0.1/24 up".format(intfs[0]))
-    dvs.runcmd("ip -6 addr add 1200::1/64 dev {}".format(intfs[0]))
+    dvs.runcmd("ifconfig {} 24.0.0.1/24 up".format(intfs[0]))
+    dvs.runcmd("ip -6 addr add 2400::1/64 dev {}".format(intfs[0]))
 
-    dvs.runcmd("ifconfig {} 16.0.0.1/24 up".format(intfs[1]))
-    dvs.runcmd("ip -6 addr add 1600::1/64 dev {}".format(intfs[1]))
+    dvs.runcmd("ifconfig {} 28.0.0.1/24 up".format(intfs[1]))
+    dvs.runcmd("ip -6 addr add 2800::1/64 dev {}".format(intfs[1]))
 
-    ips = ["12.0.0.2", "12.0.0.3", "16.0.0.2", "16.0.0.3"]
-    v6ips = ["1200::2", "1200::3", "1600::2", "1600::3"]
+    ips = ["24.0.0.2", "24.0.0.3", "28.0.0.2", "28.0.0.3"]
+    v6ips = ["2400::2", "2400::3", "2800::2", "2800::3"]
 
-    macs = ["00:00:00:00:12:02", "00:00:00:00:12:03", "00:00:00:00:16:02", "00:00:00:00:16:03"]
+    macs = ["00:00:00:00:24:02", "00:00:00:00:24:03", "00:00:00:00:28:02", "00:00:00:00:28:03"]
 
     for i in range(len(ips)):
         dvs.runcmd("ip neigh add {} dev {} lladdr {}".format(ips[i], intfs[i%2], macs[i]))
