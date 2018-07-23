@@ -4,6 +4,7 @@
 #include "logger.h"
 #include <sairedis.h>
 #include <limits.h>
+#include "notificationproducer.h"
 
 #define SAI_SWITCH_ATTR_CUSTOM_RANGE_BASE SAI_SWITCH_ATTR_CUSTOM_RANGE_START
 #include "sairedis.h"
@@ -424,12 +425,10 @@ void OrchDaemon::start()
          */
         if (gSwitchOrch->checkRestartReady() && restored)
         {
-            vector<string> ts;
-            getTaskToSync(ts);
-            bool ret = gSwitchOrch->warmRestartCheckReply(ts);
-            if (ts.size() == 0 && ret)
+            bool ret = warmRestartCheckReply();
+            if (ret)
             {
-                // No pending task, stop processing any new db data.
+                // Orchagent is ready to perform warm restart, stop processing any new db data.
                 // Should sleep here or continue handling timers and etc.??
                 SWSS_LOG_WARN("Orchagent is frozen for warm restart!");
                 sleep(UINT_MAX);
@@ -447,4 +446,38 @@ void OrchDaemon::getTaskToSync(vector<string> &ts)
     {
         o->dumpTasks(ts);
     }
+}
+
+/*
+ * Reply with "READY" notification if no pending tasks, and return true.
+ * Ortherwise reply with "NOT_READY" notification and return false.
+ * Further consideration is needed as to when orchagent is treated as warm restart ready.
+ * For now, no pending task should exist in any orch agent.
+ */
+bool OrchDaemon::warmRestartCheckReply()
+{
+    NotificationProducer restartRequestReply(m_applDb, "RESTARTCHECKREPLY");
+    std::vector<swss::FieldValueTuple> values;
+    std::string op = "READY";
+    bool ret = true;
+
+    vector<string> ts;
+    getTaskToSync(ts);
+
+    if (ts.size() != 0)
+    {
+        SWSS_LOG_ERROR("WarmRestart not ready with pending tasks: ");
+        for(auto &s : ts)
+        {
+            SWSS_LOG_NOTICE("%s", s.c_str());
+        }
+        op = "NOT_READY";
+        ret = false;
+    }
+
+    SWSS_LOG_NOTICE("Restart check result: %s", op.c_str());
+
+    restartRequestReply.send(op, op, values);
+    gSwitchOrch->checkRestartReadyDone();
+    return ret;
 }

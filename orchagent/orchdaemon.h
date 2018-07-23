@@ -35,6 +35,7 @@ public:
     bool init();
     void start();
     void getTaskToSync(vector<string> &ts);
+    bool warmRestartCheckReply();
 private:
     DBConnector *m_applDb;
     DBConnector *m_configDb;

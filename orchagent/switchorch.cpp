@@ -3,7 +3,6 @@
 #include "switchorch.h"
 #include "converter.h"
 #include "notifier.h"
-#include "notificationproducer.h"
 
 using namespace std;
 using namespace swss;
@@ -151,30 +150,3 @@ void SwitchOrch::doTask(NotificationConsumer& consumer)
     }
 }
 
-// Reply with "READY" notification if no pending tasks, and return true.
-// Ortherwise reply with "NOT_READY" notification and return false.
-bool SwitchOrch::warmRestartCheckReply(const vector<string> &ts)
-{
-    checkRestartReadyState = false;
-
-    NotificationProducer restartRequestReply(m_db, "RESTARTCHECKREPLY");
-    std::vector<swss::FieldValueTuple> values;
-    std::string op = "READY";
-    bool ret = true;
-
-    if (ts.size() != 0)
-    {
-        SWSS_LOG_ERROR("WarmRestart not ready with pending tasks: ");
-        for(auto &s : ts)
-        {
-            SWSS_LOG_NOTICE("%s", s.c_str());
-        }
-        op = "NOT_READY";
-        ret = false;
-    }
-
-    SWSS_LOG_NOTICE("Restart check result: %s", op.c_str());
-
-    restartRequestReply.send(op, op, values);
-    return ret;
-}
