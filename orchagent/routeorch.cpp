@@ -104,11 +104,10 @@ RouteOrch::RouteOrch(DBConnector *db, string tableName, NeighOrch *neighOrch) :
 
     SWSS_LOG_NOTICE("Create IPv6 default route with packet action drop");
 
-    if (isWarmStart())
-    {
-        // Read the pre-existing data for route in appDB.
-        addExistingData(db, tableName);
-    }
+
+    // Read the pre-existing data for route in appDB.
+    addExistingData(db, tableName);
+
 }
 
 bool RouteOrch::hasNextHopGroup(const IpAddresses& ipAddresses) const

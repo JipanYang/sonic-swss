@@ -40,10 +40,8 @@ FdbOrch::FdbOrch(DBConnector *db, string tableName, PortsOrch *port) :
     fdbNotifier->setName("FDB_NOTIFICATIONS");
     Orch::addExecutor("FDB_NOTIFICATIONS", fdbNotifier);
 
-    if (isWarmStart())
-    {
-        addExistingData(db, tableName);
-    }
+    addExistingData(db, tableName);
+
 }
 
 void FdbOrch::syncUpFdb()

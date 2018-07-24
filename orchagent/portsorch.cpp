@@ -239,15 +239,13 @@ PortsOrch::PortsOrch(DBConnector *db, vector<table_name_with_pri_t> &tableNames)
     m_default1QBridge = attrs[0].value.oid;
     m_defaultVlan = attrs[1].value.oid;
 
-    if (isWarmStart())
-    {
-        // Read the pre-existing data for LAG in appDB.
-        addExistingData(db, APP_LAG_TABLE_NAME);
-        addExistingData(db, APP_LAG_MEMBER_TABLE_NAME);
-        addExistingData(db, APP_VLAN_TABLE_NAME);
-        addExistingData(db, APP_VLAN_MEMBER_TABLE_NAME);
-    }
-    else
+    // Read the pre-existing data for LAG in appDB.
+    addExistingData(db, APP_LAG_TABLE_NAME);
+    addExistingData(db, APP_LAG_MEMBER_TABLE_NAME);
+    addExistingData(db, APP_VLAN_TABLE_NAME);
+    addExistingData(db, APP_VLAN_MEMBER_TABLE_NAME);
+
+    if ( !isWarmStart() )
     {
         removeDefaultVlanMembers();
         removeDefaultBridgePorts();

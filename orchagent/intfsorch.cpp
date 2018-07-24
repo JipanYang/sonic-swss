@@ -29,11 +29,10 @@ IntfsOrch::IntfsOrch(DBConnector *db, string tableName) :
         Orch(db, tableName, intfsorch_pri)
 {
     SWSS_LOG_ENTER();
-    if (isWarmStart())
-    {
-        // Read the pre-existing data for INTF in appDB.
-        addExistingData(db, APP_INTF_TABLE_NAME);
-    }
+
+    // Read the pre-existing data for INTF in appDB.
+    addExistingData(db, APP_INTF_TABLE_NAME);
+
 }
 
 sai_object_id_t IntfsOrch::getRouterIntfsId(const string &alias)

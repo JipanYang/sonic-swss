@@ -162,11 +162,8 @@ CrmOrch::CrmOrch(DBConnector *db, string tableName):
         m_resourcesMap.emplace(res.first, CrmResourceEntry(res.second, CRM_THRESHOLD_TYPE_DEFAULT, CRM_THRESHOLD_LOW_DEFAULT, CRM_THRESHOLD_HIGH_DEFAULT));
     }
 
-    if (isWarmStart())
-    {
-        // The CRM stats needs to be populated again
-        m_countersCrmTable->del(CRM_COUNTERS_TABLE_KEY);
-    }
+    // The CRM stats needs to be populated again
+    m_countersCrmTable->del(CRM_COUNTERS_TABLE_KEY);
 
     auto executor = new ExecutableTimer(m_timer.get(), this);
     executor->setName("CRM_COUNTERS_POLL");
