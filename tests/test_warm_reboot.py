@@ -390,12 +390,6 @@ def test_VlanMgrdPortSyncdWarmRestart(dvs):
             elif fv[0] == "state_restored":
                 assert fv[1] == "true"
 
-    dvs.runcmd("config warm_restart disable swss")
-    # hostcfgd not running in VS, rm the folder explicitly
-    dvs.runcmd("rm -f -r /etc/sonic/warm_restart/swss")
-    # To clean up test env.
-    dvs.runcmd("redis-cli flushall")
-
 
 # function to check the restart counter
 def check_restart_cnt(warmtbl, restart_cnt):
@@ -752,3 +746,7 @@ def test_swss_neighbor_syncup(dvs):
     check_syslog_for_neighbor_entry(dvs, 4, 2, "ipv4")
     check_syslog_for_neighbor_entry(dvs, 4, 2, "ipv6")
     check_sairedis_for_neighbor_entry(dvs, 4, 4, 4)
+
+    dvs.runcmd("config warm_restart disable swss")
+    # hostcfgd not running in VS, rm the folder explicitly
+    dvs.runcmd("rm -f -r /etc/sonic/warm_restart/swss")
