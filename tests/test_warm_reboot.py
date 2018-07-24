@@ -6,6 +6,13 @@ import json
 
 # Note: all test cases in this file are supposed to run in sequence together, fow now.
 
+def swss_flushdb(dvs):
+        # Note, this may be changed if portorch is changed to restore from APPDB completely.
+        dvs.runcmd("redis-cli -n 0 DEL PORT_TABLE:PortConfigDone")
+        dvs.runcmd("redis-cli -n 0 DEL PORT_TABLE:PortInitDone")
+
+# TODO: This test case fails sometimes due to left over arp delete message from kernel.
+# TODO: The condition of warm restart readiness check is still under discussion.
 def test_OrchagentWarmRestartReadyCheck(dvs):
 
     dvs.runcmd("config warm_restart enable swss")
@@ -29,7 +36,7 @@ def test_OrchagentWarmRestartReadyCheck(dvs):
     ps.set("2.2.2.0/24", fvs)
 
     time.sleep(1)
-    #
+    # Should fail, since neighbor for next 10.0.0.1 has not been not resolved yet
     result =  dvs.runcmd("/usr/bin/orchagent_restart_check")
     assert result == "RESTARTCHECK failed\n"
 
@@ -48,9 +55,9 @@ def test_swss_warm_restore(dvs):
         return
 
     dvs.runcmd("/usr/bin/stop_swss.sh")
-    time.sleep(3)
+    time.sleep(5)
+    swss_flushdb(dvs)
     dvs.runcmd("mv /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b")
-    dvs.runcmd("/usr/bin/swss-flushdb")
     dvs.runcmd("/usr/bin/start_swss.sh")
     time.sleep(10)
 
@@ -103,7 +110,7 @@ def test_swss_port_state_syncup(dvs):
     dvs.servers[2].runcmd("ip link set up dev eth0") == 0
 
     time.sleep(1)
-    dvs.runcmd("/usr/bin/swss-flushdb")
+    swss_flushdb(dvs)
     dvs.runcmd("/usr/bin/start_swss.sh")
     time.sleep(10)
 
@@ -224,6 +231,9 @@ def test_swss_fdb_syncup_and_crm(dvs):
 
     dvs.runcmd("/usr/bin/stop_swss.sh")
 
+    #clean the port configDone and initDone flag.
+    swss_flushdb(dvs)
+
     # delete the FDB entry in AppDB before swss is started again,
     # the orchagent is supposed to sync up the entry from ASIC DB after warm restart
     del_entry_tbl(appl_db, "FDB_TABLE", "Vlan12:52-54-00-25-06-E9")
@@ -256,7 +266,7 @@ def test_swss_fdb_syncup_and_crm(dvs):
     assert used_counter == 1
 
 
-def test_VlanMgrWarmRestart(dvs):
+def test_VlanMgrdPortSyncdWarmRestart(dvs):
 
     conf_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
     appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
@@ -325,10 +335,8 @@ def test_VlanMgrWarmRestart(dvs):
     bv_before = dvs.runcmd("bridge vlan")
     print(bv_before)
 
-   # dvs.runcmd("pkill -x vlanmgrd")
-    #dvs.runcmd("cp /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b; echo > /var/log/swss/sairedis.rec")
-    dvs.runcmd(['sh', '-c', 'pkill -x vlanmgrd; cp /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b; echo > /var/log/swss/sairedis.rec'])
-    dvs.runcmd("supervisorctl start vlanmgrd")
+    dvs.runcmd(['sh', '-c', 'pkill -x portsyncd; pkill -x vlanmgrd; cp /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b; echo > /var/log/swss/sairedis.rec'])
+    dvs.runcmd(['sh', '-c', 'supervisorctl start vlanmgrd; supervisorctl start portsyncd'])
     time.sleep(2)
 
     bv_after = dvs.runcmd("bridge vlan")
@@ -352,11 +360,27 @@ def test_VlanMgrWarmRestart(dvs):
     (status, fvs) = tbl.get("Vlan20:11.0.0.11")
     assert status == True
 
+    # Port state change reflected in appDB correctly
+    dvs.servers[6].runcmd("ip link set down dev eth0") == 0
+    dvs.servers[6].runcmd("ip link set up dev eth0") == 0
+    time.sleep(1)
+
+    portTbl = swsscommon.Table(appl_db, "PORT_TABLE")
+    (status, fvs) = portTbl.get("Ethernet24")
+    assert status == True
+
+    oper_status = "unknown"
+    for v in fvs:
+        if v[0] == "oper_status":
+            oper_status = v[1]
+            break
+    assert oper_status == "up"
+
     # restart_count for each process in vlanmgr should be 4 now
     warmtbl = swsscommon.Table(appl_db, "WARM_START_TABLE")
     keys = warmtbl.getKeys()
     for key in keys:
-        if key != "vlanmgrd":
+        if key != "vlanmgrd" and key != "portsyncd":
             continue
         (status, fvs) = warmtbl.get(key)
         assert status == True
@@ -369,4 +393,6 @@ def test_VlanMgrWarmRestart(dvs):
     dvs.runcmd("config warm_restart disable swss")
     # hostcfgd not running in VS, rm the folder explicitly
     dvs.runcmd("rm -f -r /etc/sonic/warm_restart/swss")
+    # To clean up test env.
+    dvs.runcmd("redis-cli flushall")
 

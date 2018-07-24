@@ -44,6 +44,7 @@ void handlePortConfigFile(ProducerStateTable &p, string file);
 void handlePortConfigFromConfigDB(ProducerStateTable &p, DBConnector &cfgDb);
 void handleVlanIntfFile(string file);
 void handlePortConfig(ProducerStateTable &p, map<string, KeyOpFieldsValuesTuple> &port_cfg_map);
+void checkPortInitDone(DBConnector *appl_db);
 
 int main(int argc, char **argv)
 {
@@ -75,6 +76,17 @@ int main(int argc, char **argv)
     SubscriberStateTable portCfg(&cfgDb, CFG_PORT_TABLE_NAME);
 
     checkWarmStart(&appl_db, "portsyncd");
+    if (isWarmStart())
+    {
+        checkPortInitDone(&appl_db);
+        /* If PortInitDone already set, clear the init port config buffer */
+        if(g_init)
+        {
+            deque<KeyOpFieldsValuesTuple> vkco;
+            portCfg.pops(vkco);
+        }
+
+    }
 
     LinkSync sync(&appl_db, &state_db);
     NetDispatcher::getInstance().registerMessageHandler(RTM_NEWLINK, &sync);
@@ -88,16 +100,21 @@ int main(int argc, char **argv)
         netlink.registerGroup(RTNLGRP_LINK);
         cout << "Listen to link messages..." << endl;
 
-        if (!port_config_file.empty())
+        /* For portsyncd warm start, don't process init port config again if PortInitDone set */
+        if (!g_init)
         {
-            handlePortConfigFile(p, port_config_file);
-        } else {
-            handlePortConfigFromConfigDB(p, cfgDb);
+            if (!port_config_file.empty())
+            {
+                handlePortConfigFile(p, port_config_file);
+            } else {
+                handlePortConfigFromConfigDB(p, cfgDb);
+            }
         }
 
         s.addSelectable(&netlink);
         s.addSelectable(&portCfg);
-        if (isWarmStart())
+
+        if (isWarmStart() && !g_init)
         {
             // Dump existing Links
             cout << "Warm start: send netlink RTM_GETLINK request" << endl;
@@ -321,6 +338,20 @@ void handlePortConfig(ProducerStateTable &p, map<string, KeyOpFieldsValuesTuple>
         else
         {
             it++;
+        }
+    }
+}
+
+void checkPortInitDone(DBConnector *appl_db)
+{
+    std::unique_ptr<Table>  portTable = std::unique_ptr<Table>(new Table(appl_db, APP_PORT_TABLE_NAME));
+    std::vector<FieldValueTuple> vfv;
+
+    if (portTable->get("PortInitDone", vfv))
+    {
+        if (!vfv.empty())
+        {
+            g_init = true;
         }
     }
 }

@@ -148,7 +148,7 @@ void LinkSync::onMsg(int nlmsg_type, struct nl_object *obj)
      * coming from old interfaces.
      */
 
-    if (!isWarmStart()  && (m_ifindexOldNameMap.find(ifindex) != m_ifindexOldNameMap.end()))
+    if (m_ifindexOldNameMap.find(ifindex) != m_ifindexOldNameMap.end())
     {
         SWSS_LOG_INFO("nlmsg type:%d Ignoring message for old interface %s(%d)",
                 nlmsg_type, key.c_str(), ifindex);
