@@ -331,8 +331,8 @@ void OrchDaemon::start()
          * stateDbLagTable is a special case, create/delete of LAG is controlled
          * from configDB. It is assumed that no configDB change during warm restart.
          */
-        if (restored || c->getTableName() == APP_PORT_TABLE_NAME ||
-                (c->getDbId() == CONFIG_DB || c->getDbId() == STATE_DB))
+        if (restored || (c->getDbId() == CONFIG_DB || c->getDbId() == STATE_DB) ||
+                (c->getDbId() == APPL_DB && c->getName() == APP_PORT_TABLE_NAME))
         {
             c->execute();
         }
@@ -341,8 +341,8 @@ void OrchDaemon::start()
             if (executorSet.find(c) == executorSet.end())
             {
                 executorSet.insert(c);
-                SWSS_LOG_NOTICE("Task for table %s is being postponed after state restore",
-                        c->getTableName().c_str());
+                SWSS_LOG_NOTICE("Task for executor %s is being postponed after state restore",
+                        c->getName().c_str());
             }
         }
 
@@ -361,36 +361,18 @@ void OrchDaemon::start()
         if (!restored && gPortsOrch->isInitDone())
         {
             /*
-             * drain LAG_MEMBER_TABLE and VLAN_MEMBER_TABLE since they
-             * were checked before LAG_TABLE and VLAN_TABLE previously.
+             * drain remaining data that are out of order like LAG_MEMBER_TABLE and VLAN_MEMBER_TABLE
+             * since they were checked before LAG_TABLE and VLAN_TABLE.
              */
             for (Orch *o : m_orchList)
             {
                 o->doTask();
             }
 
-            /*
-             * No pending task should exist for any of the consumer at this point.
-             * All the prexisting data in appDB and configDb have been read and processed.
-             */
-            vector<string> ts;
-            getTaskToSync(ts);
-            if (ts.size() != 0)
-            {
-                // TODO: change it to fatal once staged ProducerStateTable/ConsumerStateTable change and
-                // pre-warmStart consistency validation are ready.
-                SWSS_LOG_ERROR("There are pending consumer tasks after restore: ");
-                for(auto &s : ts)
-                {
-                    SWSS_LOG_ERROR("%s", s.c_str());
-                }
-            }
-            else
-            {
-                setWarmStartRestoreState(m_applDb, "orchagent", true);
-            }
-
+            warmRestoreValidation();
             SWSS_LOG_NOTICE("Orchagent state restore done");
+
+            /* Start dynamic state sync up */
             gPortsOrch->syncUpPortState();
             gFdbOrch->syncUpFdb();
             restored = true;
@@ -401,7 +383,7 @@ void OrchDaemon::start()
                 for (Executor *c : executorSet)
                 {
                     c->execute(false);
-                    SWSS_LOG_NOTICE("Postponed task for table %s is being processed", c->getTableName().c_str());
+                    SWSS_LOG_NOTICE("Postponed task for executor %s is being processed", c->getName().c_str());
 
                     vector<string> ts;
                     c->dumpTasks(ts);
@@ -480,4 +462,31 @@ bool OrchDaemon::warmRestartCheckReply()
     restartRequestReply.send(op, op, values);
     gSwitchOrch->checkRestartReadyDone();
     return ret;
+}
+
+/* Perform basic validation after start restore for warm start */
+bool OrchDaemon::warmRestoreValidation()
+{
+    /*
+     * No pending task should exist for any of the consumer at this point.
+     * All the prexisting data in appDB and configDb have been read and processed.
+     */
+    vector<string> ts;
+    getTaskToSync(ts);
+    if (ts.size() != 0)
+    {
+        // TODO: change it to fatal once staged ProducerStateTable/ConsumerStateTable change and
+        // pre-warmStart consistency validation are ready.
+        SWSS_LOG_ERROR("There are pending consumer tasks after restore: ");
+        for(auto &s : ts)
+        {
+            SWSS_LOG_ERROR("%s", s.c_str());
+        }
+        return false;
+    }
+    else
+    {
+        setWarmStartRestoreState(m_applDb, "orchagent", true);
+        return true;
+    }
 }

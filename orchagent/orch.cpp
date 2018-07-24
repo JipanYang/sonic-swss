@@ -166,7 +166,7 @@ void Orch::addExistingData(DBConnector *db, string tableName)
     while (it != m_consumerMap.end())
     {
         consumer = (Consumer*)(it->second.get());
-        if (tableName == consumer->getTableName())
+        if (tableName == consumer->getName())
         {
             break;
         }

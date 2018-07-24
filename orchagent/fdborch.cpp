@@ -41,7 +41,6 @@ FdbOrch::FdbOrch(DBConnector *db, string tableName, PortsOrch *port) :
     Orch::addExecutor("FDB_NOTIFICATIONS", fdbNotifier);
 
     addExistingData(db, tableName);
-
 }
 
 void FdbOrch::syncUpFdb()

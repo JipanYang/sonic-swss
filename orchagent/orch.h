@@ -92,7 +92,7 @@ public:
     virtual void execute(bool apply=true) { }
     virtual void drain() { }
 
-    virtual string getTableName() const
+    virtual string getName() const
     {
         return m_name;
     }
@@ -116,6 +116,8 @@ public:
 protected:
     Selectable *m_selectable;
     Orch *m_orch;
+
+    // Name for Executor
     string m_name;
 
     // Get the underlying selectable
@@ -135,6 +137,11 @@ public:
     }
 
     string getTableName() const
+    {
+        return getConsumerTable()->getTableName();
+    }
+
+    string getName() const
     {
         return getConsumerTable()->getTableName();
     }
