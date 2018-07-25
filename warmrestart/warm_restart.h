@@ -1,5 +1,3 @@
-//#pragma once
-
 #ifndef SWSS_WARM_RESTART_H
 #define SWSS_WARM_RESTART_H
 
