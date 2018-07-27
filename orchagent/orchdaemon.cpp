@@ -18,7 +18,7 @@ using namespace swss;
 
 extern sai_switch_api_t*           sai_switch_api;
 extern sai_object_id_t             gSwitchId;
-
+extern void syncd_apply_view();
 /*
  * Global orch daemon variables
  */
@@ -371,11 +371,13 @@ void OrchDaemon::start()
 
             warmRestoreValidation();
             SWSS_LOG_NOTICE("Orchagent state restore done");
+            restored = true;
+            syncd_apply_view();
 
             /* Start dynamic state sync up */
             gPortsOrch->syncUpPortState();
             gFdbOrch->syncUpFdb();
-            restored = true;
+
 
             /* Pick up those tasks postponed by restore processing */
             if(!executorSet.empty())
