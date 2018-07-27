@@ -165,8 +165,8 @@ void Orch::addExistingData(DBConnector *db, string tableName)
 
     while (it != m_consumerMap.end())
     {
-        consumer = (Consumer*)(it->second.get());
-        if (tableName == consumer->getName())
+        // Executor (not Consumer) may be in m_consumerMap, don't cast
+        if (tableName == (it->second.get())->getName())
         {
             break;
         }
@@ -177,6 +177,8 @@ void Orch::addExistingData(DBConnector *db, string tableName)
     {
         return;
     }
+    // Now we are sure that it is a Consumer
+    consumer = (Consumer*)(it->second.get());
 
     std::deque<KeyOpFieldsValuesTuple> entries;
     Table table = Table(db, tableName);
