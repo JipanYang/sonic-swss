@@ -298,7 +298,7 @@ void OrchDaemon::start()
     if (isWarmStart())
     {
         restored = false;
-        setWarmStartRestoreState(m_applDb, "orchagent", false);
+        setWarmStartRestoreState(m_applDb, "orchagent", WarmStartStateType::INIT);
     }
 
     while (true)
@@ -359,7 +359,7 @@ void OrchDaemon::start()
          * at contructor phase.  And the order of m_orchList guranteed the
          * dependency of tasks had been met, restore is done.
          */
-        if (!restored && !m_select->hasCachedSelectable())
+        if (!restored && !m_select->hasCachedSelectable() && gPortsOrch->isInitDone())
         {
             /*
              * drain remaining data that are out of order like LAG_MEMBER_TABLE and VLAN_MEMBER_TABLE
@@ -378,7 +378,8 @@ void OrchDaemon::start()
             /* Start dynamic state sync up */
             gPortsOrch->syncUpPortState();
             gFdbOrch->syncUpFdb();
-
+            // TODO: should be set after arp sync up
+            setWarmStartRestoreState(m_applDb, "orchagent", WarmStartStateType::SYNCED);
 
             /* Pick up those tasks postponed by restore processing */
             if(!executorSet.empty())
@@ -499,7 +500,7 @@ bool OrchDaemon::warmRestoreValidation()
     }
     else
     {
-        setWarmStartRestoreState(m_applDb, "orchagent", true);
+        setWarmStartRestoreState(m_applDb, "orchagent", WarmStartStateType::RESTORED);
         return true;
     }
 }

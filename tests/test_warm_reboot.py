@@ -83,8 +83,8 @@ def test_swss_warm_restore(dvs):
         for fv in fvs:
             if fv[0] == "restart_count":
                 assert fv[1] == "1"
-            elif fv[0] == "state_restored":
-                assert fv[1] == "true"
+            elif fv[0] == "state":
+                assert fv[1] == "synced"
 
 def test_swss_port_state_syncup(dvs):
     # syncd warm start with temp view not supported yet
@@ -127,8 +127,8 @@ def test_swss_port_state_syncup(dvs):
         for fv in fvs:
             if fv[0] == "restart_count":
                 assert fv[1] == "2"
-            elif fv[0] == "state_restored":
-                assert fv[1] == "true"
+            elif fv[0] == "state":
+                assert fv[1] == "synced"
 
     tbl = swsscommon.Table(db, "PORT_TABLE")
 
@@ -253,8 +253,8 @@ def test_swss_fdb_syncup_and_crm(dvs):
         for fv in fvs:
             if fv[0] == "restart_count":
                 assert fv[1] == "3"
-            elif fv[0] == "state_restored":
-                assert fv[1] == "true"
+            elif fv[0] == "state":
+                assert fv[1] == "synced"
 
     # get counters for FDB entries, it should be 0
     used_counter = getCrmCounterValue(dvs, 'STATS', 'crm_stats_fdb_entry_used')
@@ -387,8 +387,8 @@ def test_VlanMgrdPortSyncdWarmRestart(dvs):
         for fv in fvs:
             if fv[0] == "restart_count":
                 assert fv[1] == "4"
-            elif fv[0] == "state_restored":
-                assert fv[1] == "true"
+            elif fv[0] == "state":
+                assert fv[1] == "synced"
 
 
 # function to check the restart counter
@@ -401,8 +401,8 @@ def check_restart_cnt(warmtbl, restart_cnt):
         for fv in fvs:
             if fv[0] == "restart_count":
                 assert fv[1] == str(restart_cnt)
-            elif fv[0] == "state_restored":
-                assert fv[1] == "true"
+            elif fv[0] == "state":
+                assert fv[1] == "synced"
 
 
 # function to stop swss service and clear syslog and sairedis records
