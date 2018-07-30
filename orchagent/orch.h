@@ -104,10 +104,6 @@ public:
     {
         return -1;
     }
-    virtual void dumpTasks(vector<string> &ts)
-    {
-        return;
-    }
 
 protected:
     Selectable *m_selectable;
@@ -183,7 +179,7 @@ public:
     vector<Selectable*> getSelectables();
 
     // add the existing data to the consumer todo task list.
-    void addExistingData(DBConnector *db, string tableName);
+    bool addExistingData(DBConnector *db, const string &tableName);
 
     /* Iterate all consumers in m_consumerMap and run doTask(Consumer) */
     void doTask();

@@ -388,12 +388,22 @@ void OrchDaemon::start()
                     c->execute(false);
                     SWSS_LOG_NOTICE("Postponed task for executor %s is being processed", c->getName().c_str());
 
-                    vector<string> ts;
-                    c->dumpTasks(ts);
-                    SWSS_LOG_NOTICE("Postponed tasks: ");
-                    for(auto &s : ts)
+                    // Debugging data
                     {
-                        SWSS_LOG_NOTICE("%s", s.c_str());
+                        Consumer* consumer = dynamic_cast<Consumer *>(c);
+                        if (consumer == NULL)
+                        {
+                            SWSS_LOG_DEBUG("Executor is not a Consumer");
+                            continue;
+                        }
+
+                        vector<string> ts;
+                        consumer->dumpTasks(ts);
+                        SWSS_LOG_NOTICE("Postponed tasks: ");
+                        for(auto &s : ts)
+                        {
+                            SWSS_LOG_NOTICE("%s", s.c_str());
+                        }
                     }
                 }
                 for (Orch *o : m_orchList)

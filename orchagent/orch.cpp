@@ -158,27 +158,21 @@ void Consumer::dumpTasks(vector<string> &ts)
     }
 }
 
-void Orch::addExistingData(DBConnector *db, string tableName)
+bool Orch::addExistingData(DBConnector *db, const string &tableName)
 {
-    Consumer* consumer;
-    auto it = m_consumerMap.begin();
-
-    while (it != m_consumerMap.end())
+    auto found = m_consumerMap.find(tableName);
+    if (found == m_consumerMap.end())
     {
-        // Executor (not Consumer) may be in m_consumerMap, don't cast
-        if (tableName == (it->second.get())->getName())
-        {
-            break;
-        }
-        it++;
+        SWSS_LOG_ERROR("No table %s in Orch", tableName.c_str());
+        return false;
     }
 
-    if (it == m_consumerMap.end())
+    Consumer* consumer = dynamic_cast<Consumer *>(found->second.get());
+    if (consumer == NULL)
     {
-        return;
+        SWSS_LOG_ERROR("Executor is not a Consumer: %s", tableName.c_str());
+        return false;
     }
-    // Now we are sure that it is a Consumer
-    consumer = (Consumer*)(it->second.get());
 
     std::deque<KeyOpFieldsValuesTuple> entries;
     Table table = Table(db, tableName);
@@ -200,6 +194,7 @@ void Orch::addExistingData(DBConnector *db, string tableName)
     }
 
     consumer->addToSync(entries);
+    return true;
 }
 
 /*
@@ -300,7 +295,14 @@ void Orch::dumpTasks(vector<string> &ts)
 {
     for(auto &it : m_consumerMap)
     {
-        it.second->dumpTasks(ts);
+        Consumer* consumer = dynamic_cast<Consumer *>(it.second.get());
+        if (consumer == NULL)
+        {
+            SWSS_LOG_DEBUG("Executor is not a Consumer");
+            continue;
+        }
+
+        consumer->dumpTasks(ts);
     }
 }
 
