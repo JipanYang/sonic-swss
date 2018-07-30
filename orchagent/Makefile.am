@@ -63,7 +63,7 @@ orchagent_SOURCES = \
 		    qosorch.h \
 		    routeorch.h \
 		    saihelper.h \
-	        switchorch.h \
+		    switchorch.h \
 		    swssnet.h \
 		    tunneldecaporch.h \
 		    crmorch.h        \

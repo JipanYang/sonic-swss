@@ -5,6 +5,7 @@
 #include <sairedis.h>
 #include <limits.h>
 #include "notificationproducer.h"
+#include "warm_restart.h"
 
 #define SAI_SWITCH_ATTR_CUSTOM_RANGE_BASE SAI_SWITCH_ATTR_CUSTOM_RANGE_START
 #include "sairedis.h"
@@ -358,7 +359,7 @@ void OrchDaemon::start()
          * at contructor phase.  And the order of m_orchList guranteed the
          * dependency of tasks had been met, restore is done.
          */
-        if (!restored && gPortsOrch->isInitDone())
+        if (!restored && !m_select->hasCachedSelectable())
         {
             /*
              * drain remaining data that are out of order like LAG_MEMBER_TABLE and VLAN_MEMBER_TABLE

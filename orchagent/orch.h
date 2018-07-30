@@ -19,7 +19,6 @@ extern "C" {
 #include "notificationconsumer.h"
 #include "selectabletimer.h"
 #include "macaddress.h"
-#include "warm_restart.h"
 
 using namespace std;
 using namespace swss;
@@ -100,13 +99,10 @@ public:
     {
         m_name = name;
     }
+
     virtual int getDbId() const
     {
         return -1;
-    }
-    virtual bool isEmpty()
-    {
-        return true;
     }
     virtual void dumpTasks(vector<string> &ts)
     {
@@ -151,10 +147,6 @@ public:
         return getConsumerTable()->getDbId();
     }
 
-    bool isEmpty()
-    {
-        return (m_toSync.size() == 0);
-    }
     void dumpTasks(vector<string> &ts);
     void addToSync(std::deque<KeyOpFieldsValuesTuple> &entries);
     void execute(bool apply=true);
@@ -204,11 +196,6 @@ public:
     /* TODO: refactor recording */
     static void recordTuple(Consumer &consumer, KeyOpFieldsValuesTuple &tuple);
 
-    /*
-    * Check if there is pending task for this orch and
-    * return the name of first non-empty executor if executorName not set.
-    */
-    bool isEmpty(string &executorName);
     void dumpTasks(vector<string> &ts);
 protected:
     ConsumerMap m_consumerMap;

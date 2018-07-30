@@ -296,31 +296,11 @@ void Orch::doTask()
     }
 }
 
-bool Orch::isEmpty(string &executorName)
-{
-    for(auto &it : m_consumerMap)
-    {
-        if (it.second->isEmpty() == false)
-        {
-            if (executorName != "" && executorName != it.first)
-            {
-                continue;
-            }
-            executorName = it.first;
-            return false;
-        }
-    }
-    return true;
-}
-
 void Orch::dumpTasks(vector<string> &ts)
 {
     for(auto &it : m_consumerMap)
     {
-        if (it.second->isEmpty() == false)
-        {
-            it.second->dumpTasks(ts);
-        }
+        it.second->dumpTasks(ts);
     }
 }
 
