@@ -359,7 +359,7 @@ void OrchDaemon::start()
          * at contructor phase.  And the order of m_orchList guranteed the
          * dependency of tasks had been met, restore is done.
          */
-        if (!restored && !m_select->hasCachedSelectable() && gPortsOrch->isInitDone())
+        if (!restored && !m_select->isQueueNonEmpty() && gPortsOrch->isInitDone())
         {
             /*
              * drain remaining data that are out of order like LAG_MEMBER_TABLE and VLAN_MEMBER_TABLE
