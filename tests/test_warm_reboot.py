@@ -4,12 +4,58 @@ import re
 import time
 import json
 
-# Note: all test cases in this file are supposed to run in sequence together, fow now.
-
 def swss_flushdb(dvs):
-        # Note, this may be changed if portorch is changed to restore from APPDB completely.
-        dvs.runcmd("redis-cli -n 0 DEL PORT_TABLE:PortConfigDone")
-        dvs.runcmd("redis-cli -n 0 DEL PORT_TABLE:PortInitDone")
+    # Note, this may be changed if portorch is changed to restore from APPDB completely.
+    dvs.runcmd("redis-cli -n 0 DEL PORT_TABLE:PortConfigDone")
+    dvs.runcmd("redis-cli -n 0 DEL PORT_TABLE:PortInitDone")
+
+# Get restart count of all processes supporting warm restart
+def swss_get_RestartCount(appl_db):
+    restart_count = {}
+    warmtbl = swsscommon.Table(appl_db, swsscommon.APP_WARM_RESTART_TABLE_NAME)
+    keys = warmtbl.getKeys()
+    assert  len(keys) !=  0
+    for key in keys:
+        (status, fvs) = warmtbl.get(key)
+        assert status == True
+        for fv in fvs:
+            if fv[0] == "restart_count":
+                restart_count[key] = int(fv[1])
+    print(restart_count)
+    return restart_count
+
+# function to check the restart count incremented by 1 for all processes supporting warm restart
+def swss_check_RestartCount(appl_db, restart_count):
+    warmtbl = swsscommon.Table(appl_db, swsscommon.APP_WARM_RESTART_TABLE_NAME)
+    keys = warmtbl.getKeys()
+    print(keys)
+    assert  len(keys) > 0
+    for key in keys:
+        (status, fvs) = warmtbl.get(key)
+        assert status == True
+        for fv in fvs:
+            if fv[0] == "restart_count":
+                assert int(fv[1]) == restart_count[key] + 1
+            elif fv[0] == "state":
+                assert fv[1] == "synced"
+
+# function to check the restart count incremented by 1 for a single process
+def swss_app_check_RestartCount_single(appl_db, restart_count, name):
+    warmtbl = swsscommon.Table(appl_db, swsscommon.APP_WARM_RESTART_TABLE_NAME)
+    keys = warmtbl.getKeys()
+    print(keys)
+    print(restart_count)
+    assert  len(keys) > 0
+    for key in keys:
+        if key != name:
+            continue
+        (status, fvs) = warmtbl.get(key)
+        assert status == True
+        for fv in fvs:
+            if fv[0] == "restart_count":
+                assert int(fv[1]) == restart_count[key] + 1
+            elif fv[0] == "state":
+                assert fv[1] == "synced"
 
 # TODO: This test case fails sometimes due to left over arp delete message from kernel.
 # TODO: The condition of warm restart readiness check is still under discussion.
@@ -29,8 +75,8 @@ def test_OrchagentWarmRestartReadyCheck(dvs):
     dvs.servers[1].runcmd("ip route add default via 10.0.0.2")
 
 
-    db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
-    ps = swsscommon.ProducerStateTable(db, "ROUTE_TABLE")
+    appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
+    ps = swsscommon.ProducerStateTable(appl_db, "ROUTE_TABLE")
     fvs = swsscommon.FieldValuePairs([("nexthop","10.0.0.1"), ("ifname", "Ethernet0")])
 
     ps.set("2.2.2.0/24", fvs)
@@ -54,6 +100,8 @@ def test_swss_warm_restore(dvs):
     if dvs.tmpview == True:
         return
 
+    appl_db = swsscommon.DBConnector(0, dvs.redis_sock, 0)
+    restart_count = swss_get_RestartCount(appl_db)
     dvs.runcmd("/usr/bin/stop_swss.sh")
     time.sleep(5)
     swss_flushdb(dvs)
@@ -69,28 +117,15 @@ def test_swss_warm_restore(dvs):
     num = dvs.runcmd(['sh', '-c', 'grep \|r\| /var/log/swss/sairedis.rec | wc -l'])
     assert num == '0\n'
 
-    db = swsscommon.DBConnector(0, dvs.redis_sock, 0)
-
-    warmtbl = swsscommon.Table(db, "WARM_RESTART_TABLE")
-
-    keys = warmtbl.getKeys()
-    print(keys)
-
-    # restart_count for each process in SWSS should be 1
-    for key in ['vlanmgrd', 'portsyncd', 'orchagent', 'neighsyncd']:
-        (status, fvs) = warmtbl.get(key)
-        assert status == True
-        for fv in fvs:
-            if fv[0] == "restart_count":
-                assert fv[1] == "1"
-            elif fv[0] == "state":
-                assert fv[1] == "synced"
+    swss_check_RestartCount(appl_db, restart_count)
 
 def test_swss_port_state_syncup(dvs):
     # syncd warm start with temp view not supported yet
     if dvs.tmpview == True:
         return
 
+    appl_db = swsscommon.DBConnector(0, dvs.redis_sock, 0)
+    restart_count = swss_get_RestartCount(appl_db)
     dvs.runcmd("/usr/bin/stop_swss.sh")
     time.sleep(3)
     dvs.runcmd("mv /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b")
@@ -114,23 +149,9 @@ def test_swss_port_state_syncup(dvs):
     dvs.runcmd("/usr/bin/start_swss.sh")
     time.sleep(10)
 
-    db = swsscommon.DBConnector(0, dvs.redis_sock, 0)
+    swss_check_RestartCount(appl_db, restart_count)
 
-    warmtbl = swsscommon.Table(db, "WARM_RESTART_TABLE")
-
-    # restart_count for each process in SWSS should be 2
-    keys = warmtbl.getKeys()
-    print(keys)
-    for key in keys:
-        (status, fvs) = warmtbl.get(key)
-        assert status == True
-        for fv in fvs:
-            if fv[0] == "restart_count":
-                assert fv[1] == "2"
-            elif fv[0] == "state":
-                assert fv[1] == "synced"
-
-    tbl = swsscommon.Table(db, "PORT_TABLE")
+    tbl = swsscommon.Table(appl_db, "PORT_TABLE")
 
     for i in [0, 1, 2]:
         (status, fvs) = tbl.get("Ethernet%d" % (i * 4))
@@ -229,6 +250,8 @@ def test_swss_fdb_syncup_and_crm(dvs):
     # Change the polling interval to 20 so we may see the crm counter changes after warm restart
     dvs.runcmd("crm config polling interval 20")
 
+    restart_count = swss_get_RestartCount(appl_db)
+
     dvs.runcmd("/usr/bin/stop_swss.sh")
 
     #clean the port configDone and initDone flag.
@@ -243,18 +266,7 @@ def test_swss_fdb_syncup_and_crm(dvs):
     dvs.runcmd("/usr/bin/start_swss.sh")
     time.sleep(10)
 
-    # restart_count for each process in SWSS should be 3
-    warmtbl = swsscommon.Table(appl_db, "WARM_START_TABLE")
-    keys = warmtbl.getKeys()
-    print(keys)
-    for key in keys:
-        (status, fvs) = warmtbl.get(key)
-        assert status == True
-        for fv in fvs:
-            if fv[0] == "restart_count":
-                assert fv[1] == "3"
-            elif fv[0] == "state":
-                assert fv[1] == "synced"
+    swss_check_RestartCount(appl_db, restart_count)
 
     # get counters for FDB entries, it should be 0
     used_counter = getCrmCounterValue(dvs, 'STATS', 'crm_stats_fdb_entry_used')
@@ -335,6 +347,8 @@ def test_VlanMgrdPortSyncdWarmRestart(dvs):
     bv_before = dvs.runcmd("bridge vlan")
     print(bv_before)
 
+    restart_count = swss_get_RestartCount(appl_db)
+
     dvs.runcmd(['sh', '-c', 'pkill -x portsyncd; pkill -x vlanmgrd; cp /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b; echo > /var/log/swss/sairedis.rec'])
     dvs.runcmd(['sh', '-c', 'supervisorctl start vlanmgrd; supervisorctl start portsyncd'])
     time.sleep(2)
@@ -376,34 +390,8 @@ def test_VlanMgrdPortSyncdWarmRestart(dvs):
             break
     assert oper_status == "up"
 
-    # restart_count for each process in vlanmgr should be 4 now
-    warmtbl = swsscommon.Table(appl_db, "WARM_START_TABLE")
-    keys = warmtbl.getKeys()
-    for key in keys:
-        if key != "vlanmgrd" and key != "portsyncd":
-            continue
-        (status, fvs) = warmtbl.get(key)
-        assert status == True
-        for fv in fvs:
-            if fv[0] == "restart_count":
-                assert fv[1] == "4"
-            elif fv[0] == "state":
-                assert fv[1] == "synced"
-
-
-# function to check the restart counter
-def check_restart_cnt(warmtbl, restart_cnt):
-    keys = warmtbl.getKeys()
-    print(keys)
-    for key in keys:
-        (status, fvs) = warmtbl.get(key)
-        assert status == True
-        for fv in fvs:
-            if fv[0] == "restart_count":
-                assert fv[1] == str(restart_cnt)
-            elif fv[0] == "state":
-                assert fv[1] == "synced"
-
+    swss_app_check_RestartCount_single(appl_db, restart_count, "vlanmgrd")
+    swss_app_check_RestartCount_single(appl_db, restart_count, "portsyncd")
 
 # function to stop swss service and clear syslog and sairedis records
 def stop_swss_clear_syslog_sairedis(dvs, save_number):
@@ -514,6 +502,8 @@ def test_swss_neighbor_syncup(dvs):
     # appDB should be kept the same.
     #
 
+    restart_count = swss_get_RestartCount(appl_db)
+
     # stop swss service and clear syslog and sairedis.rec
     stop_swss_clear_syslog_sairedis(dvs, 1)
 
@@ -521,9 +511,7 @@ def test_swss_neighbor_syncup(dvs):
     time.sleep(10)
 
     # check restart_count for each process in SWSS
-    restart_cnt += 1
-    warmtbl = swsscommon.Table(appl_db, "WARM_START_TABLE")
-    check_restart_cnt(warmtbl, restart_cnt)
+    swss_check_RestartCount(appl_db, restart_count)
 
     # Check the neighbor entries are still in appDB correctly
     for i in range(len(ips)):
@@ -559,6 +547,7 @@ def test_swss_neighbor_syncup(dvs):
     #       but it will send netlink message to be removed from appDB, so it works ok here,
     #       just that if we want to add the same neighbor again, use "change" instead of "add"
 
+    restart_count = swss_get_RestartCount(appl_db)
     # stop swss service and clear syslog and sairedis.rec
     stop_swss_clear_syslog_sairedis(dvs, 2)
 
@@ -574,9 +563,7 @@ def test_swss_neighbor_syncup(dvs):
     time.sleep(10)
 
     # check restart_count for each process in SWSS
-    restart_cnt += 1
-    warmtbl = swsscommon.Table(appl_db, "WARM_START_TABLE")
-    check_restart_cnt(warmtbl, restart_cnt)
+    swss_check_RestartCount(appl_db, restart_count)
 
     # check ipv4 and ipv6 neighbors
     for i in range(len(ips)):
@@ -624,6 +611,7 @@ def test_swss_neighbor_syncup(dvs):
     # use "change" due to the kernel behaviour, start swss.
     # The neighsyncd is supposed to sync up the entries from kernel after warm restart
 
+    restart_count = swss_get_RestartCount(appl_db)
     # stop swss service and clear syslog and sairedis.rec
     stop_swss_clear_syslog_sairedis(dvs, 3)
 
@@ -639,8 +627,7 @@ def test_swss_neighbor_syncup(dvs):
     time.sleep(10)
 
     # check restart_count for each process in SWSS
-    restart_cnt += 1
-    check_restart_cnt(warmtbl, restart_cnt)
+    swss_check_RestartCount(appl_db, restart_count)
 
     # check ipv4 and ipv6 neighbors, should see all neighbors
     for i in range(len(ips)):
@@ -674,6 +661,7 @@ def test_swss_neighbor_syncup(dvs):
     # Odd number of ipv4/6 neighbors removed and added to different interfaces.
     # neighbor syncd should sync it up after warm restart
 
+    restart_count = swss_get_RestartCount(appl_db)
     # stop swss service and clear syslog and sairedis.rec
     stop_swss_clear_syslog_sairedis(dvs, 4)
 
@@ -700,8 +688,7 @@ def test_swss_neighbor_syncup(dvs):
     time.sleep(10)
 
     # check restart_count for each process in SWSS
-    restart_cnt += 1
-    check_restart_cnt(warmtbl, restart_cnt)
+    swss_check_RestartCount(appl_db, restart_count)
 
     # check ipv4 and ipv6 neighbors, should see all neighbors with updated info
     for i in range(len(ips)):
