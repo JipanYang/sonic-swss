@@ -271,7 +271,7 @@ int main(int argc, char **argv)
     DBConnector config_db(CONFIG_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
     DBConnector state_db(STATE_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
 
-    checkWarmStart(&appl_db, "orchagent");
+    WarmStart::checkWarmStart("orchagent");
 
     OrchDaemon *orchDaemon = new OrchDaemon(&appl_db, &config_db, &state_db);
     if (!orchDaemon->init())
@@ -283,7 +283,7 @@ int main(int argc, char **argv)
 
     try
     {
-        if (!isWarmStart())
+        if (!WarmStart::isWarmStart())
         {
             syncd_apply_view();
         }

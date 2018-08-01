@@ -19,7 +19,7 @@ int main(int argc, char **argv)
     DBConnector confDb(CONFIG_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
     RedisPipeline pipelineConfDB(&confDb);
 
-    checkWarmStart(&appDb, "neighsyncd");
+    WarmStart::checkWarmStart("neighsyncd");
 
     NeighSync sync(&pipelineAppDB, &pipelineConfDB);
 

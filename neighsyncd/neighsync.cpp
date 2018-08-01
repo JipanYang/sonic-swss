@@ -25,7 +25,7 @@ NeighRestartAssit::NeighRestartAssit(RedisPipeline *pipelineAppDB,
     m_startTime = time(NULL);
     m_appTableName = m_appTable.getTableName();
 
-    if (!isWarmStart())
+    if (!WarmStart::isWarmStart())
     {
         m_warmStartInProgress = false;
     }

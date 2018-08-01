@@ -245,7 +245,7 @@ PortsOrch::PortsOrch(DBConnector *db, vector<table_name_with_pri_t> &tableNames)
     addExistingData(db, APP_VLAN_TABLE_NAME);
     addExistingData(db, APP_VLAN_MEMBER_TABLE_NAME);
 
-    if ( !isWarmStart() )
+    if ( !WarmStart::isWarmStart() )
     {
         removeDefaultVlanMembers();
         removeDefaultBridgePorts();
@@ -2055,7 +2055,7 @@ bool PortsOrch::initializePort(Port &p)
     }
 #endif
     // Only set admin down and set db port oper_status to down at cold start
-    if (!isWarmStart())
+    if (!WarmStart::isWarmStart())
     {
         /* Set default port admin status to DOWN */
         /* FIXME: Do we need this? The default port admin status is false */
