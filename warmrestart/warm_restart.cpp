@@ -70,8 +70,11 @@ bool WarmStart::checkWarmStart(const std::string &app_name, const std::string &d
     pvalue = warmStart.m_stateRedisClient->hget(STATE_WARM_RESTART_TABLE_NAME"|" + app_name, "restart_count");
     if (pvalue == NULL)
     {
-        SWSS_LOG_WARN("%s doing warm start, but restart_count not found in stateDB %s table",
+        warmStart.enabled = false;
+        SWSS_LOG_WARN("%s doing warm start, but restart_count not found in stateDB %s table, fall back to cold start",
                 app_name.c_str(), STATE_WARM_RESTART_TABLE_NAME);
+        warmStart.m_stateRedisClient->hset(STATE_WARM_RESTART_TABLE_NAME"|" + app_name, "restart_count", "0");
+        return true;
     }
     else
     {
