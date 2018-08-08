@@ -239,12 +239,6 @@ PortsOrch::PortsOrch(DBConnector *db, vector<table_name_with_pri_t> &tableNames)
     m_default1QBridge = attrs[0].value.oid;
     m_defaultVlan = attrs[1].value.oid;
 
-    // Read the pre-existing data for LAG in appDB.
-    addExistingData(db, APP_LAG_TABLE_NAME);
-    addExistingData(db, APP_LAG_MEMBER_TABLE_NAME);
-    addExistingData(db, APP_VLAN_TABLE_NAME);
-    addExistingData(db, APP_VLAN_MEMBER_TABLE_NAME);
-
     if ( !WarmStart::isWarmStart() )
     {
         removeDefaultVlanMembers();
@@ -257,6 +251,9 @@ PortsOrch::PortsOrch(DBConnector *db, vector<table_name_with_pri_t> &tableNames)
     auto portStatusNotificatier = new Notifier(m_portStatusNotificationConsumer, this);
     portStatusNotificatier->setName("PORT_STATUS_NOTIFICATIONS");
     Orch::addExecutor("PORT_STATUS_NOTIFICATIONS", portStatusNotificatier);
+
+    // Try warm start
+    bake();
 }
 
 void PortsOrch::removeDefaultVlanMembers()
@@ -640,7 +637,7 @@ bool PortsOrch::bindAclTable(sai_object_id_t id, sai_object_id_t table_oid, sai_
         {
             // Bind this ACL group to LAG
             sai_attribute_t lag_attr;
-	        lag_attr.id = ingress ? SAI_LAG_ATTR_INGRESS_ACL : SAI_LAG_ATTR_EGRESS_ACL;
+            lag_attr.id = ingress ? SAI_LAG_ATTR_INGRESS_ACL : SAI_LAG_ATTR_EGRESS_ACL;
             lag_attr.value.oid = groupOid;
 
             status = sai_lag_api->set_lag_attribute(port.m_lag_id, &lag_attr);
@@ -1130,8 +1127,8 @@ bool PortsOrch::removePort(sai_object_id_t port_id)
     Port p;
     if (getPort(port_id, p))
     {
-    	PortUpdate update = {p, false };
-    	notify(SUBJECT_TYPE_PORT_CHANGE, static_cast<void *>(&update));
+        PortUpdate update = {p, false };
+        notify(SUBJECT_TYPE_PORT_CHANGE, static_cast<void *>(&update));
     }
 
     sai_status_t status = sai_port_api->remove_port(port_id);
@@ -1203,8 +1200,8 @@ bool PortsOrch::initPort(const string &alias, const set<int> &lane_set)
 
                 m_flexCounterTable->set(key, fields);
 
-    		PortUpdate update = {p, true };
-    		notify(SUBJECT_TYPE_PORT_CHANGE, static_cast<void *>(&update));
+                PortUpdate update = {p, true };
+                notify(SUBJECT_TYPE_PORT_CHANGE, static_cast<void *>(&update));
 
                 SWSS_LOG_NOTICE("Initialized port %s", alias.c_str());
             }
@@ -1222,6 +1219,55 @@ bool PortsOrch::initPort(const string &alias, const set<int> &lane_set)
     }
 
     return true;
+}
+
+bool PortsOrch::bake()
+{
+    SWSS_LOG_ENTER();
+
+    // Check the APP_DB port table for warm reboot
+    vector<FieldValueTuple> tuples;
+    bool foundPortConfigDone = m_portTable->get("PortConfigDone", tuples);
+    SWSS_LOG_NOTICE("foundPortConfigDone = %d", foundPortConfigDone);
+
+    bool foundPortInitDone = m_portTable->get("PortInitDone", tuples);
+    SWSS_LOG_NOTICE("foundPortInitDone = %d", foundPortInitDone);
+
+    vector<string> keys;
+    m_portTable->getKeys(keys);
+    SWSS_LOG_NOTICE("m_portTable->getKeys %zd", keys.size());
+
+    if (!foundPortConfigDone || !foundPortInitDone)
+    {
+        SWSS_LOG_NOTICE("No port table, fallback to cold start");
+        cleanPortTable(keys);
+        return false;
+    }
+
+    if (m_portCount != keys.size() - 2)
+    {
+        // Invalid port table
+        SWSS_LOG_ERROR("Invalid port table: m_portCount");
+        cleanPortTable(keys);
+        return false;
+    }
+
+    addExistingData(m_portTable.get());
+    addExistingData(APP_LAG_TABLE_NAME);
+    addExistingData(APP_LAG_MEMBER_TABLE_NAME);
+    addExistingData(APP_VLAN_TABLE_NAME);
+    addExistingData(APP_VLAN_MEMBER_TABLE_NAME);
+
+    return true;
+}
+
+// Clean up port table
+void PortsOrch::cleanPortTable(const vector<string>& keys)
+{
+    for (auto& key : keys)
+    {
+        m_portTable->del(key);
+    }
 }
 
 void PortsOrch::doPortTask(Consumer &consumer)
@@ -1326,6 +1372,12 @@ void PortsOrch::doPortTask(Consumer &consumer)
                 m_lanesAliasSpeedMap[lane_set] = make_tuple(alias, speed, an, fec_mode);
             }
 
+            // TODO:
+            // Fix the issue below
+            // After PortConfigDone, while waiting for "PortInitDone" and the first gBufferOrch->isPortReady(alias),
+            // the complete m_lanesAliasSpeedMap may be populated again, so initPort() will be called more than once
+            // for the same port.
+
             /* Once all ports received, go through the each port and perform appropriate actions:
              * 1. Remove ports which don't exist anymore
              * 2. Create new ports
@@ -1400,7 +1452,8 @@ void PortsOrch::doPortTask(Consumer &consumer)
 
             if (!m_portConfigDone)
             {
-                it = consumer.m_toSync.erase(it);
+                // Not yet receive PortConfigDone. Save it for future retry
+                it++;
                 continue;
             }
 
@@ -2054,17 +2107,39 @@ bool PortsOrch::initializePort(Port &p)
         return false;
     }
 #endif
-    // Only set admin down and set db port oper_status to down at cold start
-    if (!WarmStart::isWarmStart())
-    {
-        /* Set default port admin status to DOWN */
-        /* FIXME: Do we need this? The default port admin status is false */
-        setPortAdminStatus(p.m_port_id, false);
 
-        /**
-         * Create default database port oper status as DOWN
-         * This status will be updated when receiving port_oper_status_notification.
-         */
+    /* Check warm start states */
+    vector<FieldValueTuple> tuples;
+    bool exist = m_portTable->get(p.m_alias, tuples);
+    string adminStatus, operStatus;
+    if (exist)
+    {
+        for (auto i : tuples)
+        {
+            if (fvField(i) == "admin_status")
+            {
+                adminStatus = fvValue(i);
+            }
+            else if (fvField(i) == "oper_status")
+            {
+                operStatus = fvValue(i);
+            }
+        }
+    }
+    SWSS_LOG_DEBUG("initializePort %s with admin %s and oper %s", p.m_alias.c_str(), adminStatus.c_str(), operStatus.c_str());
+
+    /* Set port admin status to DOWN if attr missing */
+    if (adminStatus != "up")
+    {
+        setPortAdminStatus(p.m_port_id, false);
+    }
+
+    /**
+     * Create database port oper status as DOWN if attr missing
+     * This status will be updated when receiving port_oper_status_notification.
+     */
+    if (operStatus != "up")
+    {
         vector<FieldValueTuple> vector;
         FieldValueTuple tuple("oper_status", "down");
         vector.push_back(tuple);

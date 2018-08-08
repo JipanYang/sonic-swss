@@ -21,7 +21,7 @@ NeighOrch::NeighOrch(DBConnector *db, string tableName, IntfsOrch *intfsOrch) :
     SWSS_LOG_ENTER();
 
     // Read the pre-existing data for neigh in appDB.
-    addExistingData(db, tableName);
+    addExistingData(tableName);
 
 }
 

@@ -122,6 +122,37 @@ void Consumer::addToSync(std::deque<KeyOpFieldsValuesTuple> &entries)
     }
 }
 
+// TODO: Table should be const
+void Consumer::refillToSync(Table* table)
+{
+    std::deque<KeyOpFieldsValuesTuple> entries;
+    vector<string> keys;
+    table->getKeys(keys);
+    for (const auto &key: keys)
+    {
+        KeyOpFieldsValuesTuple kco;
+
+        kfvKey(kco) = key;
+        kfvOp(kco) = SET_COMMAND;
+
+        if (!table->get(key, kfvFieldsValues(kco)))
+        {
+            continue;
+        }
+        entries.push_back(kco);
+    }
+
+    addToSync(entries);
+}
+
+void Consumer::refillToSync()
+{
+    auto db = getConsumerTable()->getDbConnector();
+    string tableName = getConsumerTable()->getTableName();
+    auto table = Table(db, tableName);
+    refillToSync(&table);
+}
+
 void Consumer::execute(bool apply)
 {
     SWSS_LOG_ENTER();
@@ -158,42 +189,31 @@ void Consumer::dumpTasks(vector<string> &ts)
     }
 }
 
-bool Orch::addExistingData(DBConnector *db, const string &tableName)
+bool Orch::addExistingData(const string& tableName)
 {
-    auto found = m_consumerMap.find(tableName);
-    if (found == m_consumerMap.end())
-    {
-        SWSS_LOG_ERROR("No table %s in Orch", tableName.c_str());
-        return false;
-    }
-
-    Consumer* consumer = dynamic_cast<Consumer *>(found->second.get());
+    Consumer* consumer = dynamic_cast<Consumer *>(getExecutor(tableName));
     if (consumer == NULL)
     {
-        SWSS_LOG_ERROR("Executor is not a Consumer: %s", tableName.c_str());
+        SWSS_LOG_ERROR("No consumer %s in Orch", tableName.c_str());
         return false;
     }
 
-    std::deque<KeyOpFieldsValuesTuple> entries;
-    Table table = Table(db, tableName);
-    vector<string> keys;
+    consumer->refillToSync();
+    return true;
+}
 
-    table.getKeys(keys);
-    for (const auto &key: keys)
+// TODO: Table should be const
+bool Orch::addExistingData(Table *table)
+{
+    string tableName = table->getTableName();
+    Consumer* consumer = dynamic_cast<Consumer *>(getExecutor(tableName));
+    if (consumer == NULL)
     {
-        KeyOpFieldsValuesTuple kco;
-
-        kfvKey(kco) = key;
-        kfvOp(kco) = SET_COMMAND;
-
-        if (!table.get(key, kfvFieldsValues(kco)))
-        {
-            continue;
-        }
-        entries.push_back(kco);
+        SWSS_LOG_ERROR("No consumer %s in Orch", tableName.c_str());
+        return false;
     }
 
-    consumer->addToSync(entries);
+    consumer->refillToSync(table);
     return true;
 }
 

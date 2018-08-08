@@ -31,7 +31,7 @@ IntfsOrch::IntfsOrch(DBConnector *db, string tableName) :
     SWSS_LOG_ENTER();
 
     // Read the pre-existing data for INTF in appDB.
-    addExistingData(db, APP_INTF_TABLE_NAME);
+    addExistingData(APP_INTF_TABLE_NAME);
 
 }
 

@@ -100,11 +100,6 @@ public:
         m_name = name;
     }
 
-    virtual int getDbId() const
-    {
-        return -1;
-    }
-
 protected:
     Selectable *m_selectable;
     Orch *m_orch;
@@ -118,20 +113,21 @@ protected:
 
 class Consumer : public Executor {
 public:
-    Consumer(TableConsumable *select, Orch *orch)
+    Consumer(ConsumerTableBase *select, Orch *orch)
         : Executor(select, orch)
     {
     }
 
-    TableConsumable *getConsumerTable() const
+    ConsumerTableBase *getConsumerTable() const
     {
-        return static_cast<TableConsumable *>(getSelectable());
+        return static_cast<ConsumerTableBase *>(getSelectable());
     }
 
     string getTableName() const
     {
         return getConsumerTable()->getTableName();
     }
+
 
     string getName() const
     {
@@ -144,8 +140,12 @@ public:
     }
 
     void dumpTasks(vector<string> &ts);
+
     void addToSync(std::deque<KeyOpFieldsValuesTuple> &entries);
+    void refillToSync();
+    void refillToSync(Table* table);
     void execute(bool apply=true);
+
     void drain();
 
     /* Store the latest 'golden' status */
@@ -178,8 +178,9 @@ public:
 
     vector<Selectable*> getSelectables();
 
-    // add the existing data to the consumer todo task list.
-    bool addExistingData(DBConnector *db, const string &tableName);
+    // add the existing table data (left by warm reboot) to the consumer todo task list.
+    bool addExistingData(Table *table);
+    bool addExistingData(const string& tableName);
 
     /* Iterate all consumers in m_consumerMap and run doTask(Consumer) */
     void doTask();

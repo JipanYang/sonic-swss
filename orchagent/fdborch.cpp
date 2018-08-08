@@ -40,7 +40,7 @@ FdbOrch::FdbOrch(DBConnector *db, string tableName, PortsOrch *port) :
     fdbNotifier->setName("FDB_NOTIFICATIONS");
     Orch::addExecutor("FDB_NOTIFICATIONS", fdbNotifier);
 
-    addExistingData(db, tableName);
+    addExistingData(tableName);
 }
 
 void FdbOrch::syncUpFdb()

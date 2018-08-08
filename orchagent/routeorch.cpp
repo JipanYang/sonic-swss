@@ -106,7 +106,7 @@ RouteOrch::RouteOrch(DBConnector *db, string tableName, NeighOrch *neighOrch) :
 
 
     // Read the pre-existing data for route in appDB.
-    addExistingData(db, tableName);
+    addExistingData(tableName);
 
 }
 

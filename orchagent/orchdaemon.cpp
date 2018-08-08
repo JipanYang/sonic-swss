@@ -326,20 +326,26 @@ void OrchDaemon::start()
         }
 
         auto *c = (Executor *)s;
-        /*
-         * Don't process any new data other than those from APP PORT_TABLE or ConfigDB
-         * before state restore is finished.
-         * stateDbLagTable is a special case, create/delete of LAG is controlled
-         * from configDB. It is assumed that no configDB change during warm restart.
-         */
-        if (restored || (c->getDbId() == CONFIG_DB || c->getDbId() == STATE_DB) ||
-                (c->getDbId() == APPL_DB && c->getName() == APP_PORT_TABLE_NAME))
+
+        if (restored)
         {
             c->execute();
         }
         else
         {
-            if (executorSet.find(c) == executorSet.end())
+            /*
+             * Don't process any new data other than those from ConfigDB
+             * before state restore is finished.
+             * stateDbLagTable is a special case, create/delete of LAG is controlled
+             * from configDB. It is assumed that no configDB change during warm restart.
+             */
+
+            Consumer* consumer = dynamic_cast<Consumer *>(c);
+            if (consumer != NULL && (consumer->getDbId() == CONFIG_DB || consumer->getDbId() == STATE_DB))
+            {
+                c->execute();
+            }
+            else if (executorSet.find(c) == executorSet.end())
             {
                 executorSet.insert(c);
                 SWSS_LOG_NOTICE("Task for executor %s is being postponed after state restore",
