@@ -82,6 +82,7 @@ int main(int argc, char **argv)
         /* If PortInitDone already set, clear the init port config buffer */
         if(g_init)
         {
+            cout << "portsyncd warm start" << endl;
             deque<KeyOpFieldsValuesTuple> vkco;
             portCfg.pops(vkco);
         }

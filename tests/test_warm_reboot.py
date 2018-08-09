@@ -4,11 +4,6 @@ import re
 import time
 import json
 
-def swss_flushdb(dvs):
-    # Note, this may be changed if portorch is changed to restore from APPDB completely.
-    dvs.runcmd("redis-cli -n 0 DEL PORT_TABLE:PortConfigDone")
-    dvs.runcmd("redis-cli -n 0 DEL PORT_TABLE:PortInitDone")
-
 # Get restart count of all processes supporting warm restart
 def swss_get_RestartCount(state_db):
     restart_count = {}
@@ -123,7 +118,6 @@ def test_swss_warm_restore(dvs):
     restart_count = swss_get_RestartCount(state_db)
     dvs.runcmd("/usr/bin/stop_swss.sh")
     time.sleep(5)
-    swss_flushdb(dvs)
     dvs.runcmd("mv /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b")
     dvs.runcmd("/usr/bin/start_swss.sh")
     time.sleep(10)
@@ -170,7 +164,6 @@ def test_swss_port_state_syncup(dvs):
     dvs.servers[2].runcmd("ip link set up dev eth0") == 0
 
     time.sleep(1)
-    swss_flushdb(dvs)
     dvs.runcmd("/usr/bin/start_swss.sh")
     time.sleep(10)
 
@@ -284,8 +277,6 @@ def test_swss_fdb_syncup_and_crm(dvs):
 
     dvs.runcmd("/usr/bin/stop_swss.sh")
 
-    #clean the port configDone and initDone flag.
-    swss_flushdb(dvs)
 
     # delete the FDB entry in AppDB before swss is started again,
     # the orchagent is supposed to sync up the entry from ASIC DB after warm restart

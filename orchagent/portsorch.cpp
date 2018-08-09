@@ -1247,9 +1247,15 @@ bool PortsOrch::bake()
     if (m_portCount != keys.size() - 2)
     {
         // Invalid port table
-        SWSS_LOG_ERROR("Invalid port table: m_portCount");
-        cleanPortTable(keys);
-        return false;
+        SWSS_LOG_ERROR("Invalid port table: m_portCount, expecting %u, got %lu",
+                m_portCount, keys.size() - 2);
+
+        // Get around https://github.com/Azure/sonic-swss/issues/567 for now
+        if (!WarmStart::isWarmStart())
+        {
+            cleanPortTable(keys);
+            return false;
+        }
     }
 
     addExistingData(m_portTable.get());
