@@ -405,7 +405,7 @@ void OrchDaemon::start()
                         }
 
                         vector<string> ts;
-                        consumer->dumpTasks(ts);
+                        consumer->dumpToSyncTasks(ts);
                         SWSS_LOG_NOTICE("Postponed tasks: ");
                         for(auto &s : ts)
                         {
@@ -446,7 +446,7 @@ void OrchDaemon::getTaskToSync(vector<string> &ts)
 {
     for (Orch *o : m_orchList)
     {
-        o->dumpTasks(ts);
+        o->dumpToSyncTasks(ts);
     }
 }
 
