@@ -16,7 +16,7 @@ int main(int argc, char **argv)
 
     std::string op = "orchagent";
 
-    swss::DBConnector db(ASIC_DB, swss::DBConnector::DEFAULT_UNIXSOCKET, 0);
+    swss::DBConnector db(APPL_DB, swss::DBConnector::DEFAULT_UNIXSOCKET, 0);
     swss::NotificationProducer restartQuery(&db, "RESTARTCHECK");
 
     swss::NotificationConsumer restartQueryReply(&db, "RESTARTCHECKREPLY");
