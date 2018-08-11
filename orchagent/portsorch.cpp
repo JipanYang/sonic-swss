@@ -250,9 +250,6 @@ PortsOrch::PortsOrch(DBConnector *db, vector<table_name_with_pri_t> &tableNames)
     m_portStatusNotificationConsumer = new swss::NotificationConsumer(notificationsDb, "NOTIFICATIONS");
     auto portStatusNotificatier = new Notifier(m_portStatusNotificationConsumer, this, "PORT_STATUS_NOTIFICATIONS");
     Orch::addExecutor(portStatusNotificatier);
-
-    // Try warm start
-    bake();
 }
 
 void PortsOrch::removeDefaultVlanMembers()
@@ -1237,9 +1234,7 @@ bool PortsOrch::bake()
     if (m_portCount != keys.size() - 2)
     {
         // Invalid port table
-        SWSS_LOG_ERROR("Invalid port table: m_portCount, expecting %u, got %lu",
-                m_portCount, keys.size() - 2);
-
+        SWSS_LOG_ERROR("Invalid port table: m_portCount");
         // Get around https://github.com/Azure/sonic-swss/issues/567 for now
         if (!WarmStart::isWarmStart())
         {

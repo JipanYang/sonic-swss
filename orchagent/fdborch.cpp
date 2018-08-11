@@ -34,8 +34,6 @@ FdbOrch::FdbOrch(DBConnector *db, string tableName, PortsOrch *port) :
     m_fdbNotificationConsumer = new swss::NotificationConsumer(notificationsDb, "NOTIFICATIONS");
     auto fdbNotifier = new Notifier(m_fdbNotificationConsumer, this, "FDB_NOTIFICATIONS");
     Orch::addExecutor(fdbNotifier);
-
-    addExistingData(tableName);
 }
 
 void FdbOrch::syncUpFdb()
