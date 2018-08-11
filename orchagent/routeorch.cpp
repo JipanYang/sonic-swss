@@ -3,6 +3,7 @@
 #include "logger.h"
 #include "swssnet.h"
 #include "crmorch.h"
+#include "sairedis.h"
 
 extern sai_object_id_t gVirtualRouterId;
 extern sai_object_id_t gSwitchId;
@@ -542,11 +543,12 @@ bool RouteOrch::addNextHopGroup(IpAddresses ipAddresses)
     nhg_attrs.push_back(nhg_attr);
 
     sai_object_id_t next_hop_group_id;
+    SET_OBJ_OWNER(ipAddresses.to_string() + "_");
     sai_status_t status = sai_next_hop_group_api->create_next_hop_group(&next_hop_group_id,
                                                                         gSwitchId,
                                                                         (uint32_t)nhg_attrs.size(),
                                                                         nhg_attrs.data());
-
+    UNSET_OBJ_OWNER();
     if (status != SAI_STATUS_SUCCESS)
     {
         SWSS_LOG_ERROR("Failed to create next hop group %s, rv:%d",

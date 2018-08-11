@@ -10,6 +10,7 @@
 #include "swssnet.h"
 #include "tokenize.h"
 #include "crmorch.h"
+#include "bufferorch.h"
 
 extern sai_object_id_t gVirtualRouterId;
 
@@ -20,6 +21,7 @@ extern sai_neighbor_api_t*          sai_neighbor_api;
 extern PortsOrch *gPortsOrch;
 extern sai_object_id_t gSwitchId;
 extern CrmOrch *gCrmOrch;
+extern BufferOrch *gBufferOrch;
 
 const int intfsorch_pri = 35;
 
@@ -84,7 +86,16 @@ void IntfsOrch::doTask(Consumer &consumer)
         {
             if (alias == "lo")
             {
-                addIp2MeRoute(ip_prefix);
+                // set request for lo may come after warm start restore
+                auto it_intfs = m_syncdIntfses.find(alias);
+                if (it_intfs == m_syncdIntfses.end())
+                {
+                    IntfsEntry intfs_entry;
+                    intfs_entry.ref_count = 0;
+                    m_syncdIntfses[alias] = intfs_entry;
+                    addIp2MeRoute(ip_prefix);
+                }
+
                 it = consumer.m_toSync.erase(it);
                 continue;
             }
@@ -93,6 +104,13 @@ void IntfsOrch::doTask(Consumer &consumer)
             if (!gPortsOrch->getPort(alias, port))
             {
                 /* TODO: Resolve the dependency relationship and add ref_count to port */
+                it++;
+                continue;
+            }
+
+            // buffer configuration hasn't been applied yet, hold from intf config.
+            if (!gBufferOrch->isPortReady(alias))
+            {
                 it++;
                 continue;
             }
@@ -162,6 +180,7 @@ void IntfsOrch::doTask(Consumer &consumer)
         {
             if (alias == "lo")
             {
+                m_syncdIntfses.erase(alias);
                 removeIp2MeRoute(ip_prefix);
                 it = consumer.m_toSync.erase(it);
                 continue;

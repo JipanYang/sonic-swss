@@ -8,8 +8,8 @@ namespace swss {
 class ExecutableTimer : public Executor
 {
 public:
-    ExecutableTimer(SelectableTimer *timer, Orch *orch)
-        : Executor(timer, orch)
+    ExecutableTimer(SelectableTimer *timer, Orch *orch, const string &name)
+        : Executor(timer, orch, name)
     {
     }
 
@@ -18,7 +18,7 @@ public:
         return static_cast<SelectableTimer *>(getSelectable());
     }
 
-    void execute()
+    void execute(bool apply=true)
     {
         m_orch->doTask(*getSelectableTimer());
     }

@@ -3,6 +3,7 @@
 #include "portsorch.h"
 #include "tokenize.h"
 #include "logger.h"
+#include "sairedis.h"
 
 #include <sstream>
 #include <iostream>
@@ -293,7 +294,9 @@ bool CoppOrch::createPolicer(string trap_group_name, vector<sai_attribute_t> &po
     sai_object_id_t policer_id;
     sai_status_t sai_status;
 
+    SET_OBJ_OWNER(trap_group_name + "_");
     sai_status = sai_policer_api->create_policer(&policer_id, gSwitchId, (uint32_t)policer_attribs.size(), policer_attribs.data());
+    UNSET_OBJ_OWNER();
     if (sai_status != SAI_STATUS_SUCCESS)
     {
         SWSS_LOG_ERROR("Failed to create policer trap group %s, rc=%d", trap_group_name.c_str(), sai_status);
@@ -498,7 +501,9 @@ task_process_status CoppOrch::processCoppRule(Consumer& consumer)
         {
             sai_object_id_t new_trap;
 
+            SET_OBJ_OWNER(trap_group_name + "_");
             sai_status = sai_hostif_api->create_hostif_trap_group(&new_trap, gSwitchId, (uint32_t)trap_gr_attribs.size(), trap_gr_attribs.data());
+            UNSET_OBJ_OWNER();
             if (sai_status != SAI_STATUS_SUCCESS)
             {
                 SWSS_LOG_ERROR("Failed to create host interface trap group %s, rc=%d", trap_group_name.c_str(), sai_status);
