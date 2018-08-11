@@ -286,6 +286,16 @@ void OrchDaemon::start()
 {
     SWSS_LOG_ENTER();
 
+    bool restored = true;
+    // executorSet stores all Executors which have data/task to be processed
+    // after state restore phase of warm start.
+    set<Executor *> executorSet;
+    if (WarmStart::isWarmStart())
+    {
+        restored = false;
+        WarmStart::setWarmStartState("orchagent", WarmStart::INIT);
+    }
+
     // Try warm start
     for (Orch *o : m_orchList)
     {
@@ -295,16 +305,6 @@ void OrchDaemon::start()
     for (Orch *o : m_orchList)
     {
         m_select->addSelectables(o->getSelectables());
-    }
-
-    bool restored = true;
-    // executorSet stores all Executors which have data/task to be processed
-    // after state restore phase of warm start.
-    set<Executor *> executorSet;
-    if (WarmStart::isWarmStart())
-    {
-        restored = false;
-        WarmStart::setWarmStartState("orchagent", WarmStart::INIT);
     }
 
     while (true)
@@ -331,26 +331,11 @@ void OrchDaemon::start()
         {
             c->execute();
         }
-        else
+        else if (executorSet.find(c) == executorSet.end())
         {
-            /*
-             * Don't process any new data other than those from ConfigDB
-             * before state restore is finished.
-             * stateDbLagTable is a special case, create/delete of LAG is controlled
-             * from configDB. It is assumed that no configDB change during warm restart.
-             */
-
-            Consumer* consumer = dynamic_cast<Consumer *>(c);
-            if (consumer != NULL && (consumer->getDbId() == CONFIG_DB || consumer->getDbId() == STATE_DB))
-            {
-                c->execute();
-            }
-            else if (executorSet.find(c) == executorSet.end())
-            {
-                executorSet.insert(c);
-                SWSS_LOG_NOTICE("Task for executor %s is being postponed after state restore",
-                        c->getName().c_str());
-            }
+            executorSet.insert(c);
+            SWSS_LOG_NOTICE("Task for executor %s is being postponed after state restore",
+                    c->getName().c_str());
         }
 
         /* After each iteration, periodically check all m_toSync map to
@@ -359,14 +344,6 @@ void OrchDaemon::start()
         /* TODO: Abstract Orch class to have a specific todo list */
         for (Orch *o : m_orchList)
             o->doTask();
-
-        /* Let sairedis to flush all SAI function call to ASIC DB.
-         * Normally the redis pipeline will flush when enough request
-         * accumulated. Still it is possible that small amount of
-         * requests live in it. When the daemon has finished events/tasks, it
-         * is a good chance to flush the pipeline before next select happened.
-         */
-        flush();
 
         /*
          * All data to be restored have been added to m_toSync of each orch
@@ -379,6 +356,11 @@ void OrchDaemon::start()
              * drain remaining data that are out of order like LAG_MEMBER_TABLE and VLAN_MEMBER_TABLE
              * since they were checked before LAG_TABLE and VLAN_TABLE.
              */
+            for (Orch *o : m_orchList)
+            {
+                o->doTask();
+            }
+
             for (Orch *o : m_orchList)
             {
                 o->doTask();
@@ -444,6 +426,14 @@ void OrchDaemon::start()
                 sleep(UINT_MAX);
             }
         }
+
+        /* Let sairedis to flush all SAI function call to ASIC DB.
+         * Normally the redis pipeline will flush when enough request
+         * accumulated. Still it is possible that small amount of
+         * requests live in it. When the daemon has finished events/tasks, it
+         * is a good chance to flush the pipeline before next select happened.
+         */
+        flush();
     }
 }
 
