@@ -44,8 +44,8 @@ FdbOrch::FdbOrch(DBConnector *db, string tableName, PortsOrch *port) :
  * Syncd doesn't know whether the signal has been lost or not.
  * Also the source of notification event is from libsai/SDK.
  *
- * Syncd puts a copy of FDB into ASIC DB the moment it generate DFB notification.
- * Here orchagent read the data directly from ASIC_STATE:SAI_OBJECT_TYPE_FDB_ENTRY
+ * Syncd puts a copy of FDB into ASIC DB the moment it generates FDB notification.
+ * Here orchagent reads the data directly from ASIC_STATE:SAI_OBJECT_TYPE_FDB_ENTRY
  */
 void FdbOrch::syncUpFdb()
 {
