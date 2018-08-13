@@ -321,6 +321,14 @@ void OrchDaemon::start()
         for (Orch *o : m_orchList)
             o->doTask();
 
+        /* Let sairedis to flush all SAI function call to ASIC DB.
+         * Normally the redis pipeline will flush when enough request
+         * accumulated. Still it is possible that small amount of
+         * requests live in it. When the daemon has finished events/tasks, it
+         * is a good chance to flush the pipeline before next select happened.
+         */
+        flush();
+
         /*
          * Asked to check warm restart readiness.
          * Not doing this under Select::TIMEOUT condition because of
@@ -338,18 +346,11 @@ void OrchDaemon::start()
             }
         }
 
-        /* Let sairedis to flush all SAI function call to ASIC DB.
-         * Normally the redis pipeline will flush when enough request
-         * accumulated. Still it is possible that small amount of
-         * requests live in it. When the daemon has finished events/tasks, it
-         * is a good chance to flush the pipeline before next select happened.
-         */
-        flush();
     }
 }
 
 /*
- * Trying to perform orchagent state restore and dynamic states sync up if
+ * Try to perform orchagent state restore and dynamic states sync up if
  * warm start reqeust is detected.
  */
 void OrchDaemon::warmRestoreAndSyncUp()
@@ -389,7 +390,7 @@ void OrchDaemon::warmRestoreAndSyncUp()
     }
 
     /*
-     * At this point, all the pre-existing data should be have been processed properly, and
+     * At this point, all the pre-existing data should have been processed properly, and
      * orchagent should be in exact same state of pre-shutdown.
      * Perform restore validation as needed.
      */

@@ -132,10 +132,10 @@ public:
 
     string dumpTuple(KeyOpFieldsValuesTuple &tuple);
     void dumpToSyncTasks(vector<string> &ts);
-    void execute();
 
     size_t refillToSync();
     size_t refillToSync(Table* table);
+    void execute();
     void drain();
 
     /* Store the latest 'golden' status */
