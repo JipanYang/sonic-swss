@@ -34,6 +34,7 @@ public:
 
     bool init();
     void start();
+    void warmRestoreAndSyncUp();
     void getTaskToSync(vector<string> &ts);
     bool warmRestartCheckReply();
     bool warmRestoreValidation();

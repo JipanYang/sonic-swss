@@ -167,7 +167,7 @@ size_t Consumer::refillToSync()
     }
 }
 
-void Consumer::execute(bool apply)
+void Consumer::execute()
 {
     SWSS_LOG_ENTER();
 
@@ -176,8 +176,7 @@ void Consumer::execute(bool apply)
 
     addToSync(entries);
 
-    if (apply)
-        drain();
+    drain();
 }
 
 void Consumer::drain()

@@ -286,21 +286,7 @@ void OrchDaemon::start()
 {
     SWSS_LOG_ENTER();
 
-    bool restored = true;
-    // executorSet stores all Executors which have data/task to be processed
-    // after state restore phase of warm start.
-    set<Executor *> executorSet;
-    if (WarmStart::isWarmStart())
-    {
-        restored = false;
-        WarmStart::setWarmStartState("orchagent", WarmStart::INIT);
-    }
-
-    // Try warm start
-    for (Orch *o : m_orchList)
-    {
-        o->bake();
-    }
+    warmRestoreAndSyncUp();
 
     for (Orch *o : m_orchList)
     {
@@ -326,17 +312,7 @@ void OrchDaemon::start()
         }
 
         auto *c = (Executor *)s;
-
-        if (restored)
-        {
-            c->execute();
-        }
-        else if (executorSet.find(c) == executorSet.end())
-        {
-            executorSet.insert(c);
-            SWSS_LOG_NOTICE("Task for executor %s is being postponed after state restore",
-                    c->getName().c_str());
-        }
+        c->execute();
 
         /* After each iteration, periodically check all m_toSync map to
          * execute all the remaining tasks that need to be retried. */
@@ -346,76 +322,11 @@ void OrchDaemon::start()
             o->doTask();
 
         /*
-         * All data to be restored have been added to m_toSync of each orch
-         * at contructor phase.  And the order of m_orchList guranteed the
-         * dependency of tasks had been met, restore is done.
-         */
-        if (!restored && m_select->isQueueEmpty() && gPortsOrch->isInitDone())
-        {
-            /*
-             * drain remaining data that are out of order like LAG_MEMBER_TABLE and VLAN_MEMBER_TABLE
-             * since they were checked before LAG_TABLE and VLAN_TABLE.
-             */
-            for (Orch *o : m_orchList)
-            {
-                o->doTask();
-            }
-
-            for (Orch *o : m_orchList)
-            {
-                o->doTask();
-            }
-
-            warmRestoreValidation();
-            SWSS_LOG_NOTICE("Orchagent state restore done");
-            restored = true;
-            syncd_apply_view();
-
-            /* Start dynamic state sync up */
-            gPortsOrch->syncUpPortState();
-            gFdbOrch->syncUpFdb();
-            // TODO: should be set after arp sync up
-            WarmStart::setWarmStartState("orchagent", WarmStart::RECONCILED);
-
-            /* Pick up those tasks postponed by restore processing */
-            if(!executorSet.empty())
-            {
-                for (Executor *c : executorSet)
-                {
-                    c->execute(false);
-                    SWSS_LOG_NOTICE("Postponed task for executor %s is being processed", c->getName().c_str());
-
-                    // Debugging data
-                    {
-                        Consumer* consumer = dynamic_cast<Consumer *>(c);
-                        if (consumer == NULL)
-                        {
-                            SWSS_LOG_DEBUG("Executor is not a Consumer");
-                            continue;
-                        }
-
-                        vector<string> ts;
-                        consumer->dumpToSyncTasks(ts);
-                        SWSS_LOG_NOTICE("Postponed tasks: ");
-                        for(auto &s : ts)
-                        {
-                            SWSS_LOG_NOTICE("%s", s.c_str());
-                        }
-                    }
-                }
-                for (Orch *o : m_orchList)
-                {
-                    o->doTask();
-                }
-            }
-        }
-
-        /*
          * Asked to check warm restart readiness.
          * Not doing this under Select::TIMEOUT condition because of
          * the existence of finer granularity ExecutableTimer with select
          */
-        if (gSwitchOrch->checkRestartReady() && restored)
+        if (gSwitchOrch->checkRestartReady())
         {
             bool ret = warmRestartCheckReply();
             if (ret)
@@ -435,6 +346,67 @@ void OrchDaemon::start()
          */
         flush();
     }
+}
+
+/*
+ * Trying to perform orchagent state restore and dynamic states sync up if
+ * warm start reqeust is detected.
+ */
+void OrchDaemon::warmRestoreAndSyncUp()
+{
+    if (!WarmStart::isWarmStart())
+    {
+        return;
+    }
+
+    WarmStart::setWarmStartState("orchagent", WarmStart::INIT);
+
+    for (Orch *o : m_orchList)
+    {
+        o->bake();
+    }
+
+    /*
+     * First iteration is to handle all the existing data in predefined order.
+     */
+    for (Orch *o : m_orchList)
+    {
+        o->doTask();
+    }
+    /*
+     * Drain remaining data that are out of order like LAG_MEMBER_TABLE and VLAN_MEMBER_TABLE
+     * since they were checked before LAG_TABLE and VLAN_TABLE.
+     */
+    for (Orch *o : m_orchList)
+    {
+        o->doTask();
+    }
+
+    // One more iteration due to the VLAN lag empty member restrictioin temporary fix, to be removed.
+    for (Orch *o : m_orchList)
+    {
+        o->doTask();
+    }
+
+    /*
+     * At this point, all the pre-existing data should be have been processed properly, and
+     * orchagent should be in exact same state of pre-shutdown.
+     * Perform restore validation as needed.
+     */
+    warmRestoreValidation();
+
+    SWSS_LOG_NOTICE("Orchagent state restore done");
+    syncd_apply_view();
+
+    /* Start dynamic state sync up */
+    gPortsOrch->syncUpPortState();
+    gFdbOrch->syncUpFdb();
+
+    /*
+     * Note. Arp sync up is handled in neighsyncd.
+     * The "RECONCILED" state of orchagent doesn't mean the state related to neighbor is up to date.
+     */
+    WarmStart::setWarmStartState("orchagent", WarmStart::RECONCILED);
 }
 
 /*

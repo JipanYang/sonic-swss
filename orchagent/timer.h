@@ -18,7 +18,7 @@ public:
         return static_cast<SelectableTimer *>(getSelectable());
     }
 
-    void execute(bool apply=true)
+    void execute()
     {
         m_orch->doTask(*getSelectableTimer());
     }

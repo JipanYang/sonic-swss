@@ -89,7 +89,7 @@ public:
     Executor& operator=(const Executor&) = delete;
 
     // Execute on event happening
-    virtual void execute(bool apply=true) { }
+    virtual void execute() { }
     virtual void drain() { }
 
     virtual string getName() const
@@ -132,7 +132,7 @@ public:
 
     string dumpTuple(KeyOpFieldsValuesTuple &tuple);
     void dumpToSyncTasks(vector<string> &ts);
-    void execute(bool apply=true);
+    void execute();
 
     size_t refillToSync();
     size_t refillToSync(Table* table);
