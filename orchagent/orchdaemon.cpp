@@ -418,7 +418,7 @@ void OrchDaemon::getTaskToSync(vector<string> &ts)
 {
     for (Orch *o : m_orchList)
     {
-        o->dumpToSyncTasks(ts);
+        o->dumpPendingTasks(ts);
     }
 }
 

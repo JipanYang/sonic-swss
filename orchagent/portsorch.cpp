@@ -21,7 +21,7 @@
 #include "bufferorch.h"
 #include "notifier.h"
 #include "sairedis.h"
-#include <warm_restart.h>
+#include "warm_restart.h"
 
 extern sai_switch_api_t *sai_switch_api;
 extern sai_bridge_api_t *sai_bridge_api;

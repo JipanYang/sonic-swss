@@ -131,7 +131,7 @@ public:
     }
 
     string dumpTuple(KeyOpFieldsValuesTuple &tuple);
-    void dumpToSyncTasks(vector<string> &ts);
+    void dumpPendingTasks(vector<string> &ts);
 
     size_t refillToSync();
     size_t refillToSync(Table* table);
@@ -191,7 +191,7 @@ public:
     /* TODO: refactor recording */
     static void recordTuple(Consumer &consumer, KeyOpFieldsValuesTuple &tuple);
 
-    void dumpToSyncTasks(vector<string> &ts);
+    void dumpPendingTasks(vector<string> &ts);
 protected:
     ConsumerMap m_consumerMap;
 
