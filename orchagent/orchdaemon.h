@@ -36,7 +36,7 @@ public:
     void start();
     void warmRestoreAndSyncUp();
     void getTaskToSync(vector<string> &ts);
-    bool warmRestartCheckReply();
+    bool warmRestartCheck();
     bool warmRestoreValidation();
 private:
     DBConnector *m_applDb;

@@ -7,7 +7,7 @@ import json
 # Get restart count of all processes supporting warm restart
 def swss_get_RestartCount(state_db):
     restart_count = {}
-    warmtbl = swsscommon.Table(state_db, swsscommon.STATE_WARM_RESTART_TABLE_NAME)
+    warmtbl = swsscommon.Table(state_db, "WARM_RESTART_TABLE")
     keys = warmtbl.getKeys()
     assert  len(keys) !=  0
     for key in keys:
@@ -21,7 +21,7 @@ def swss_get_RestartCount(state_db):
 
 # function to check the restart count incremented by 1 for all processes supporting warm restart
 def swss_check_RestartCount(state_db, restart_count):
-    warmtbl = swsscommon.Table(state_db, swsscommon.STATE_WARM_RESTART_TABLE_NAME)
+    warmtbl = swsscommon.Table(state_db, "WARM_RESTART_TABLE")
     keys = warmtbl.getKeys()
     print(keys)
     assert  len(keys) > 0
@@ -48,7 +48,7 @@ def check_port_oper_status(appl_db, port_name, state):
 
 # function to check the restart count incremented by 1 for a single process
 def swss_app_check_RestartCount_single(state_db, restart_count, name):
-    warmtbl = swsscommon.Table(state_db, swsscommon.STATE_WARM_RESTART_TABLE_NAME)
+    warmtbl = swsscommon.Table(state_db, "WARM_RESTART_TABLE")
     keys = warmtbl.getKeys()
     print(keys)
     print(restart_count)
@@ -68,6 +68,7 @@ def swss_app_check_RestartCount_single(state_db, restart_count, name):
 # TODO: The condition of warm restart readiness check is still under discussion.
 def test_OrchagentWarmRestartReadyCheck(dvs):
 
+    dvs.runcmd("ip -s -s neigh flush all")
     # do a pre-cleanup
     dvs.runcmd("ip -s -s neigh flush all")
     time.sleep(1)
@@ -97,6 +98,10 @@ def test_OrchagentWarmRestartReadyCheck(dvs):
     result =  dvs.runcmd("/usr/bin/orchagent_restart_check")
     assert result == "RESTARTCHECK failed\n"
 
+    # Should succeed, the option for pendingTaskCheck -s and noFreeze -n have been provided.
+    result =  dvs.runcmd("/usr/bin/orchagent_restart_check -n -s")
+    assert result == "RESTARTCHECK succeeded\n"
+
     # get neighbor and arp entry
     dvs.servers[1].runcmd("ping -c 1 10.0.0.1")
 
@@ -104,6 +109,9 @@ def test_OrchagentWarmRestartReadyCheck(dvs):
     result =  dvs.runcmd("/usr/bin/orchagent_restart_check")
     assert result == "RESTARTCHECK succeeded\n"
 
+    # Should fail since orchagent has been frozen at last step.
+    result =  dvs.runcmd("/usr/bin/orchagent_restart_check -n -s")
+    assert result == "RESTARTCHECK failed\n"
 
 def test_swss_warm_restore(dvs):
 
