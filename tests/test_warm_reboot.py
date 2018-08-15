@@ -7,7 +7,7 @@ import json
 # Get restart count of all processes supporting warm restart
 def swss_get_RestartCount(state_db):
     restart_count = {}
-    warmtbl = swsscommon.Table(state_db, "WARM_RESTART_TABLE")
+    warmtbl = swsscommon.Table(state_db, swsscommon.STATE_WARM_RESTART_TABLE_NAME)
     keys = warmtbl.getKeys()
     assert  len(keys) !=  0
     for key in keys:
@@ -21,7 +21,7 @@ def swss_get_RestartCount(state_db):
 
 # function to check the restart count incremented by 1 for all processes supporting warm restart
 def swss_check_RestartCount(state_db, restart_count):
-    warmtbl = swsscommon.Table(state_db, "WARM_RESTART_TABLE")
+    warmtbl = swsscommon.Table(state_db, swsscommon.STATE_WARM_RESTART_TABLE_NAME)
     keys = warmtbl.getKeys()
     print(keys)
     assert  len(keys) > 0
@@ -35,7 +35,7 @@ def swss_check_RestartCount(state_db, restart_count):
                 assert fv[1] == "reconciled"
 
 def check_port_oper_status(appl_db, port_name, state):
-    portTbl = swsscommon.Table(appl_db, "PORT_TABLE")
+    portTbl = swsscommon.Table(appl_db, swsscommon.APP_PORT_TABLE_NAME)
     (status, fvs) = portTbl.get(port_name)
     assert status == True
 
@@ -48,7 +48,7 @@ def check_port_oper_status(appl_db, port_name, state):
 
 # function to check the restart count incremented by 1 for a single process
 def swss_app_check_RestartCount_single(state_db, restart_count, name):
-    warmtbl = swsscommon.Table(state_db, "WARM_RESTART_TABLE")
+    warmtbl = swsscommon.Table(state_db, swsscommon.STATE_WARM_RESTART_TABLE_NAME)
     keys = warmtbl.getKeys()
     print(keys)
     print(restart_count)
@@ -88,7 +88,7 @@ def test_OrchagentWarmRestartReadyCheck(dvs):
 
 
     appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
-    ps = swsscommon.ProducerStateTable(appl_db, "ROUTE_TABLE")
+    ps = swsscommon.ProducerStateTable(appl_db, swsscommon.APP_ROUTE_TABLE_NAME)
     fvs = swsscommon.FieldValuePairs([("nexthop","10.0.0.1"), ("ifname", "Ethernet0")])
 
     ps.set("2.2.2.0/24", fvs)
@@ -177,7 +177,7 @@ def test_swss_port_state_syncup(dvs):
 
     swss_check_RestartCount(state_db, restart_count)
 
-    tbl = swsscommon.Table(appl_db, "PORT_TABLE")
+    tbl = swsscommon.Table(appl_db, swsscommon.APP_PORT_TABLE_NAME)
 
     for i in [0, 1, 2]:
         (status, fvs) = tbl.get("Ethernet%d" % (i * 4))
