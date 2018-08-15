@@ -30,6 +30,13 @@ bool NeighOrch::addNextHop(IpAddress ipAddress, string alias)
 {
     SWSS_LOG_ENTER();
 
+    Port p;
+    if (!gPortsOrch->getPort(alias, p))
+    {
+        SWSS_LOG_ERROR("Port %s doesn't exist", alias.c_str());
+        return false;
+    }
+
     assert(!hasNextHop(ipAddress));
     sai_object_id_t rif_id = m_intfsOrch->getRouterIntfsId(alias);
 
@@ -78,6 +85,16 @@ bool NeighOrch::addNextHop(IpAddress ipAddress, string alias)
         gCrmOrch->incCrmResUsedCounter(CrmResourceType::CRM_IPV6_NEXTHOP);
     }
 
+    // For nexthop which has ingress port oper status down, NHFLAGS_IFDOWN
+    // flag Should be set on it.
+    if (p.m_oper_status == SAI_PORT_OPER_STATUS_DOWN)
+    {
+        if (setNextHopFlag(ipAddress, NHFLAGS_IFDOWN) == false)
+        {
+            SWSS_LOG_WARN("Failed to set NHFLAGS_IFDOWN on nexthop %s for interface %s",
+                ipAddress.to_string().c_str(), alias.c_str());
+        }
+    }
     return true;
 }
 

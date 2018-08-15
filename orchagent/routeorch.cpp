@@ -516,7 +516,7 @@ bool RouteOrch::addNextHopGroup(IpAddresses ipAddresses)
 
     vector<sai_object_id_t> next_hop_ids;
     set<IpAddress> next_hop_set = ipAddresses.getIpAddresses();
-    sai_object_id_t next_hop_id;
+    // sai_object_id_t next_hop_id;
     std::map<sai_object_id_t, IpAddress> nhopgroup_members_set;
 
     /* Assert each IP address exists in m_syncdNextHops table,
@@ -566,6 +566,11 @@ bool RouteOrch::addNextHopGroup(IpAddresses ipAddresses)
 
     for (auto nhid: next_hop_ids)
     {
+        // skip next hop group member create for neighbor from down port
+        if (m_neighOrch->isNextHopFlagSet(nhopgroup_members_set[nhid], NHFLAGS_IFDOWN)) {
+            continue;
+        }
+
         // Create a next hop group member
         vector<sai_attribute_t> nhgm_attrs;
 
@@ -610,6 +615,7 @@ bool RouteOrch::addNextHopGroup(IpAddresses ipAddresses)
     next_hop_group_entry.ref_count = 0;
     m_syncdNextHopGroups[ipAddresses] = next_hop_group_entry;
 
+/*
     for (auto nhop : next_hop_set) {
         if (!m_neighOrch->isNextHopFlagSet(nhop, NHFLAGS_IFDOWN)) {
             continue;
@@ -625,7 +631,7 @@ bool RouteOrch::addNextHopGroup(IpAddresses ipAddresses)
 
         gCrmOrch->decCrmResUsedCounter(CrmResourceType::CRM_NEXTHOP_GROUP_MEMBER);
     }
-
+*/
     return true;
 }
 
@@ -653,6 +659,8 @@ bool RouteOrch::removeNextHopGroup(IpAddresses ipAddresses)
 
         if (m_neighOrch->isNextHopFlagSet(nhop->first, NHFLAGS_IFDOWN))
         {
+            SWSS_LOG_WARN("NHFLAGS_IFDOWN set for next hop group member %lx",
+                           nhop->second);
             nhop = next_hop_group_entry->second.nhopgroup_members.erase(nhop);
             continue;
         }
