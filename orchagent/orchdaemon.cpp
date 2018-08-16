@@ -423,6 +423,29 @@ void OrchDaemon::getTaskToSync(vector<string> &ts)
     }
 }
 
+
+/* Perform basic validation after start restore for warm start */
+bool OrchDaemon::warmRestoreValidation()
+{
+    /*
+     * No pending task should exist for any of the consumer at this point.
+     * All the prexisting data in appDB and configDb have been read and processed.
+     */
+    vector<string> ts;
+    getTaskToSync(ts);
+    if (ts.size() != 0)
+    {
+        // TODO: Update this section accordingly once pre-warmStart consistency validation is ready.
+        SWSS_LOG_NOTICE("There are pending consumer tasks after restore: ");
+        for(auto &s : ts)
+        {
+            SWSS_LOG_NOTICE("%s", s.c_str());
+        }
+    }
+    WarmStart::setWarmStartState("orchagent", WarmStart::RESTORED);
+    return true;
+}
+
 /*
  * Reply with "READY" notification if no pending tasks, and return true.
  * Ortherwise reply with "NOT_READY" notification and return false.
@@ -462,24 +485,3 @@ bool OrchDaemon::warmRestartCheck()
     return ret;
 }
 
-/* Perform basic validation after start restore for warm start */
-bool OrchDaemon::warmRestoreValidation()
-{
-    /*
-     * No pending task should exist for any of the consumer at this point.
-     * All the prexisting data in appDB and configDb have been read and processed.
-     */
-    vector<string> ts;
-    getTaskToSync(ts);
-    if (ts.size() != 0)
-    {
-        // TODO: Update this section accordingly once pre-warmStart consistency validation is ready.
-        SWSS_LOG_NOTICE("There are pending consumer tasks after restore: ");
-        for(auto &s : ts)
-        {
-            SWSS_LOG_NOTICE("%s", s.c_str());
-        }
-    }
-    WarmStart::setWarmStartState("orchagent", WarmStart::RESTORED);
-    return true;
-}

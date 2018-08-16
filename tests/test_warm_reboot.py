@@ -64,6 +64,39 @@ def swss_app_check_RestartCount_single(state_db, restart_count, name):
             elif fv[0] == "state":
                 assert fv[1] == "reconciled"
 
+def create_entry(tbl, key, pairs):
+    fvs = swsscommon.FieldValuePairs(pairs)
+    tbl.set(key, fvs)
+
+    # FIXME: better to wait until DB create them
+    time.sleep(1)
+
+def create_entry_tbl(db, table, key, pairs):
+    tbl = swsscommon.Table(db, table)
+    create_entry(tbl, key, pairs)
+
+def del_entry_tbl(db, table, key):
+    tbl = swsscommon.Table(db, table)
+    tbl._del(key)
+
+def create_entry_pst(db, table, key, pairs):
+    tbl = swsscommon.ProducerStateTable(db, table)
+    create_entry(tbl, key, pairs)
+
+def how_many_entries_exist(db, table):
+    tbl =  swsscommon.Table(db, table)
+    return len(tbl.getKeys())
+
+def getCrmCounterValue(dvs, key, counter):
+
+    counters_db = swsscommon.DBConnector(swsscommon.COUNTERS_DB, dvs.redis_sock, 0)
+    crm_stats_table = swsscommon.Table(counters_db, 'CRM')
+
+    for k in crm_stats_table.get(key)[1]:
+        if k[0] == counter:
+            return int(k[1])
+    return 0
+
 # TODO: This test case fails sometimes due to left over arp delete message from kernel.
 # TODO: The condition of warm restart readiness check is still under discussion.
 def test_OrchagentWarmRestartReadyCheck(dvs):
@@ -194,39 +227,6 @@ def test_swss_port_state_syncup(dvs):
         else:
             assert oper_status == "down"
 
-
-def create_entry(tbl, key, pairs):
-    fvs = swsscommon.FieldValuePairs(pairs)
-    tbl.set(key, fvs)
-
-    # FIXME: better to wait until DB create them
-    time.sleep(1)
-
-def create_entry_tbl(db, table, key, pairs):
-    tbl = swsscommon.Table(db, table)
-    create_entry(tbl, key, pairs)
-
-def del_entry_tbl(db, table, key):
-    tbl = swsscommon.Table(db, table)
-    tbl._del(key)
-
-def create_entry_pst(db, table, key, pairs):
-    tbl = swsscommon.ProducerStateTable(db, table)
-    create_entry(tbl, key, pairs)
-
-def how_many_entries_exist(db, table):
-    tbl =  swsscommon.Table(db, table)
-    return len(tbl.getKeys())
-
-def getCrmCounterValue(dvs, key, counter):
-
-    counters_db = swsscommon.DBConnector(swsscommon.COUNTERS_DB, dvs.redis_sock, 0)
-    crm_stats_table = swsscommon.Table(counters_db, 'CRM')
-
-    for k in crm_stats_table.get(key)[1]:
-        if k[0] == counter:
-            return int(k[1])
-    return 0
 
 def test_swss_fdb_syncup_and_crm(dvs):
     # syncd warm start with temp view not supported yet
@@ -393,8 +393,6 @@ def test_PortSyncdWarmRestart(dvs):
 def test_VlanMgrdWarmRestart(dvs):
 
     dvs.runcmd("config warm_restart enable swss")
-    # hostcfgd not running in VS, create the folder explicitly
-    dvs.runcmd("mkdir -p /etc/sonic/warm_restart/swss")
 
     conf_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
     appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
@@ -407,6 +405,17 @@ def test_VlanMgrdWarmRestart(dvs):
     dvs.runcmd("ifconfig Ethernet20  up")
 
     time.sleep(1)
+
+    # enable warm restart
+    # TODO: use cfg command to config it
+    create_entry_tbl(
+        conf_db,
+        swsscommon.CFG_WARM_RESTART_TABLE_NAME, "swss",
+        [
+            ("enable", "true"),
+        ]
+    )
+
     # create vlan
     create_entry_tbl(
         conf_db,
@@ -842,5 +851,3 @@ def test_swss_neighbor_syncup(dvs):
     check_sairedis_for_neighbor_entry(dvs, 4, 4, 4)
 
     dvs.runcmd("config warm_restart disable swss")
-    # hostcfgd not running in VS, rm the folder explicitly
-    dvs.runcmd("rm -f -r /etc/sonic/warm_restart/swss")
