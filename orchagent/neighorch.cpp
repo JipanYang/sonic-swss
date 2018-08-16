@@ -33,7 +33,8 @@ bool NeighOrch::addNextHop(IpAddress ipAddress, string alias)
     Port p;
     if (!gPortsOrch->getPort(alias, p))
     {
-        SWSS_LOG_ERROR("Port %s doesn't exist", alias.c_str());
+        SWSS_LOG_ERROR("Neighbor %s seen on port %s which doesn't exist",
+                        ipAddress.to_string().c_str(), alias.c_str());
         return false;
     }
 
@@ -85,8 +86,10 @@ bool NeighOrch::addNextHop(IpAddress ipAddress, string alias)
         gCrmOrch->incCrmResUsedCounter(CrmResourceType::CRM_IPV6_NEXTHOP);
     }
 
-    // For nexthop which has ingress port oper status down, NHFLAGS_IFDOWN
+    // For nexthop with incoming port which has down oper status, NHFLAGS_IFDOWN
     // flag Should be set on it.
+    // This scenario may happen under race condition where buffered neighbor event
+    // is processed after incoming port is down.
     if (p.m_oper_status == SAI_PORT_OPER_STATUS_DOWN)
     {
         if (setNextHopFlag(ipAddress, NHFLAGS_IFDOWN) == false)
