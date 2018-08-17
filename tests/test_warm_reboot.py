@@ -101,7 +101,6 @@ def getCrmCounterValue(dvs, key, counter):
 # TODO: The condition of warm restart readiness check is still under discussion.
 def test_OrchagentWarmRestartReadyCheck(dvs):
 
-    dvs.runcmd("ip -s -s neigh flush all")
     # do a pre-cleanup
     dvs.runcmd("ip -s -s neigh flush all")
     time.sleep(1)
@@ -234,8 +233,6 @@ def test_swss_fdb_syncup_and_crm(dvs):
         return
 
     dvs.runcmd("config warm_restart enable swss")
-    # hostcfgd not running in VS, create the folder explicitly
-    dvs.runcmd("mkdir -p /etc/sonic/warm_restart/swss")
 
     # Prepare FDB entry before swss stop
     appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
