@@ -145,7 +145,7 @@ void SwitchOrch::doTask(NotificationConsumer& consumer)
 
     m_warmRestartCheck.checkRestartReadyState = false;
     m_warmRestartCheck.noFreeze = false;
-    m_warmRestartCheck.pendingTaskCheck = false;
+    m_warmRestartCheck.skipPendingTaskCheck = false;
 
     SWSS_LOG_NOTICE("RESTARTCHECK notification for %s ", op.c_str());
     if (op == "orchagent")
@@ -163,7 +163,7 @@ void SwitchOrch::doTask(NotificationConsumer& consumer)
             }
             if (fvField(i) == "SkipPendingTaskCheck" && fvValue(i) == "true")
             {
-                m_warmRestartCheck.pendingTaskCheck = true;
+                m_warmRestartCheck.skipPendingTaskCheck = true;
             }
         }
         SWSS_LOG_NOTICE("%s", s.c_str());
