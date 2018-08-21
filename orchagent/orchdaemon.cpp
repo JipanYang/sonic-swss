@@ -18,7 +18,6 @@ using namespace swss;
 
 extern sai_switch_api_t*           sai_switch_api;
 extern sai_object_id_t             gSwitchId;
-extern void syncd_apply_view();
 /*
  * Global orch daemon variables
  */
@@ -264,6 +263,11 @@ bool OrchDaemon::init()
 
     m_orchList.push_back(&CounterCheckOrch::getInstance(m_configDb));
 
+    if (WarmStart::isWarmStart())
+    {
+        warmRestoreAndSyncUp();
+    }
+
     return true;
 }
 
@@ -285,8 +289,6 @@ void OrchDaemon::flush()
 void OrchDaemon::start()
 {
     SWSS_LOG_ENTER();
-
-    warmRestoreAndSyncUp();
 
     for (Orch *o : m_orchList)
     {
@@ -357,11 +359,6 @@ void OrchDaemon::start()
  */
 void OrchDaemon::warmRestoreAndSyncUp()
 {
-    if (!WarmStart::isWarmStart())
-    {
-        return;
-    }
-
     WarmStart::setWarmStartState("orchagent", WarmStart::INIT);
 
     for (Orch *o : m_orchList)
@@ -399,7 +396,6 @@ void OrchDaemon::warmRestoreAndSyncUp()
     warmRestoreValidation();
 
     SWSS_LOG_NOTICE("Orchagent state restore done");
-    syncd_apply_view();
 
     /* Start dynamic state sync up */
     gPortsOrch->syncUpPortState();
