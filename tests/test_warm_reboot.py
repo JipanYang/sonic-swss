@@ -97,6 +97,15 @@ def getCrmCounterValue(dvs, key, counter):
             return int(k[1])
     return 0
 
+# No create/set/remove operations should be passed down to syncd for vlanmgr/portsyncd warm restart
+def checkCleanSaiRedisCSR(dvs):
+    (exitcode, num) = dvs.runcmd(['sh', '-c', 'grep \|c\| /var/log/swss/sairedis.rec | wc -l'])
+    assert num == '0\n'
+    (exitcode, num) = dvs.runcmd(['sh', '-c', 'grep \|s\| /var/log/swss/sairedis.rec | wc -l'])
+    assert num == '0\n'
+    (exitcode, num) = dvs.runcmd(['sh', '-c', 'grep \|r\| /var/log/swss/sairedis.rec | wc -l'])
+    assert num == '0\n'
+
 # TODO: This test case fails sometimes due to left over arp delete message from kernel.
 # TODO: The condition of warm restart readiness check is still under discussion.
 def test_OrchagentWarmRestartReadyCheck(dvs):
@@ -127,23 +136,23 @@ def test_OrchagentWarmRestartReadyCheck(dvs):
 
     time.sleep(1)
     # Should fail, since neighbor for next 10.0.0.1 has not been not resolved yet
-    result =  dvs.runcmd("/usr/bin/orchagent_restart_check")
+    (exitcode, result) =  dvs.runcmd("/usr/bin/orchagent_restart_check")
     assert result == "RESTARTCHECK failed\n"
 
     # Should succeed, the option for skipPendingTaskCheck -s and noFreeze -n have been provided.
     # Wait up to 500 milliseconds for response from orchagent. Default wait time is 1000 milliseconds.
-    result =  dvs.runcmd("/usr/bin/orchagent_restart_check -n -s -w 500")
+    (exitcode, result) =  dvs.runcmd("/usr/bin/orchagent_restart_check -n -s -w 500")
     assert result == "RESTARTCHECK succeeded\n"
 
     # get neighbor and arp entry
     dvs.servers[1].runcmd("ping -c 1 10.0.0.1")
 
     time.sleep(1)
-    result =  dvs.runcmd("/usr/bin/orchagent_restart_check")
+    (exitcode, result) =  dvs.runcmd("/usr/bin/orchagent_restart_check")
     assert result == "RESTARTCHECK succeeded\n"
 
     # Should fail since orchagent has been frozen at last step.
-    result =  dvs.runcmd("/usr/bin/orchagent_restart_check -n -s -w 500")
+    (exitcode, result) =  dvs.runcmd("/usr/bin/orchagent_restart_check -n -s -w 500")
     assert result == "RESTARTCHECK failed\n"
 
 def test_swss_warm_restore(dvs):
@@ -163,13 +172,7 @@ def test_swss_warm_restore(dvs):
     dvs.runcmd("/usr/bin/start_swss.sh")
     time.sleep(10)
 
-    # No create/set/remove operations should be passed down to syncd for swss restore
-    num = dvs.runcmd(['sh', '-c', 'grep \|c\| /var/log/swss/sairedis.rec | wc -l'])
-    assert num == '0\n'
-    num = dvs.runcmd(['sh', '-c', 'grep \|s\| /var/log/swss/sairedis.rec | wc -l'])
-    assert num == '0\n'
-    num = dvs.runcmd(['sh', '-c', 'grep \|r\| /var/log/swss/sairedis.rec | wc -l'])
-    assert num == '0\n'
+    checkCleanSaiRedisCSR(dvs)
 
     swss_check_RestartCount(state_db, restart_count)
 
@@ -358,13 +361,7 @@ def test_PortSyncdWarmRestart(dvs):
     dvs.runcmd(['sh', '-c', 'supervisorctl start portsyncd'])
     time.sleep(2)
 
-     # No create/set/remove operations should be passed down to syncd for portsyncd warm restart
-    num = dvs.runcmd(['sh', '-c', 'grep \|c\| /var/log/swss/sairedis.rec | wc -l'])
-    assert num == '0\n'
-    num = dvs.runcmd(['sh', '-c', 'grep \|s\| /var/log/swss/sairedis.rec | wc -l'])
-    assert num == '0\n'
-    num = dvs.runcmd(['sh', '-c', 'grep \|r\| /var/log/swss/sairedis.rec | wc -l'])
-    assert num == '0\n'
+    checkCleanSaiRedisCSR(dvs)
 
     #new ip on server 5
     dvs.servers[5].runcmd("ifconfig eth0 11.0.0.11/29")
@@ -446,13 +443,7 @@ def test_PortSyncdWarmRestart(dvs):
     dvs.runcmd(['sh', '-c', 'supervisorctl start portsyncd'])
     time.sleep(2)
 
-     # No create/set/remove operations should be passed down to syncd for portsyncd warm restart
-    num = dvs.runcmd(['sh', '-c', 'grep \|c\| /var/log/swss/sairedis.rec | wc -l'])
-    assert num == '0\n'
-    num = dvs.runcmd(['sh', '-c', 'grep \|s\| /var/log/swss/sairedis.rec | wc -l'])
-    assert num == '0\n'
-    num = dvs.runcmd(['sh', '-c', 'grep \|r\| /var/log/swss/sairedis.rec | wc -l'])
-    assert num == '0\n'
+    checkCleanSaiRedisCSR(dvs)
 
     #new ip on server 5
     dvs.servers[5].runcmd("ifconfig eth0 11.0.0.11/29")
@@ -573,13 +564,7 @@ def test_VlanMgrdWarmRestart(dvs):
     (exitcode, bv_after) = dvs.runcmd("bridge vlan")
     assert bv_after == bv_before
 
-     # No create/set/remove operations should be passed down to syncd for vlanmgr warm restart
-    (exitcode, num) = dvs.runcmd(['sh', '-c', 'grep \|c\| /var/log/swss/sairedis.rec | wc -l'])
-    assert num == '0\n'
-    (exitcode, num) = dvs.runcmd(['sh', '-c', 'grep \|s\| /var/log/swss/sairedis.rec | wc -l'])
-    assert num == '0\n'
-    (exitcode, num) = dvs.runcmd(['sh', '-c', 'grep \|r\| /var/log/swss/sairedis.rec | wc -l'])
-    assert num == '0\n'
+    checkCleanSaiRedisCSR(dvs)
 
     #new ip on server 5
     dvs.servers[5].runcmd("ifconfig eth0 11.0.0.11/29")
