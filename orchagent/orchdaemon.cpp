@@ -5,9 +5,10 @@
 #include <sairedis.h>
 #include <limits.h>
 #include "warm_restart.h"
+#include "sai_redis_idempotent.h"
 
 #define SAI_SWITCH_ATTR_CUSTOM_RANGE_BASE SAI_SWITCH_ATTR_CUSTOM_RANGE_START
-#include "sairedis.h"
+
 
 using namespace std;
 using namespace swss;

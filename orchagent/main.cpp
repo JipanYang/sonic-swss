@@ -24,6 +24,7 @@ extern "C" {
 #include "notifications.h"
 #include <signal.h>
 #include "warm_restart.h"
+#include "sai_redis_idempotent.h"
 
 using namespace std;
 using namespace swss;

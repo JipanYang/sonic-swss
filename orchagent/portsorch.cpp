@@ -21,7 +21,7 @@
 #include "crmorch.h"
 #include "countercheckorch.h"
 #include "notifier.h"
-#include "sairedis.h"
+#include "sai_redis_idempotent.h"
 #include "warm_restart.h"
 
 extern sai_switch_api_t *sai_switch_api;

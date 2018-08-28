@@ -3,7 +3,7 @@
 #include "logger.h"
 #include "swssnet.h"
 #include "crmorch.h"
-#include "sairedis.h"
+#include "sai_redis_idempotent.h"
 
 extern sai_object_id_t gVirtualRouterId;
 extern sai_object_id_t gSwitchId;

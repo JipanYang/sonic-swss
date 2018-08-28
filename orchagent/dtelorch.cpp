@@ -5,7 +5,7 @@
 #include "converter.h"
 #include "ipprefix.h"
 #include "swssnet.h"
-#include "sairedis.h"
+#include "sai_redis_idempotent.h"
 
 using namespace std;
 using namespace swss;

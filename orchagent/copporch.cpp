@@ -3,7 +3,7 @@
 #include "portsorch.h"
 #include "tokenize.h"
 #include "logger.h"
-#include "sairedis.h"
+#include "sai_redis_idempotent.h"
 
 #include <sstream>
 #include <iostream>
