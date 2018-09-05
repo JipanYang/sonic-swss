@@ -275,6 +275,7 @@ int main(int argc, char **argv)
     DBConnector state_db(STATE_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
 
     auto orchDaemon = make_shared<OrchDaemon>(&appl_db, &config_db, &state_db);
+    syncd_apply_view();
 
     try
     {
@@ -283,8 +284,6 @@ int main(int argc, char **argv)
             SWSS_LOG_ERROR("Failed to initialize orchstration daemon");
             exit(EXIT_FAILURE);
         }
-
-        syncd_apply_view();
 
         orchDaemon->start();
     }
