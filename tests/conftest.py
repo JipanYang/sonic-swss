@@ -147,10 +147,6 @@ class DockerVirtualSwitch(object):
         self.cleanup = True
 
         # whether to disable temp view in syncd
-        if useTempView == False:
-            os.system("mkdir -p /var/run/redis-vs/noUseTempView")
-        else:
-            os.system("rm -f -r /var/run/redis-vs/noUseTempView")
         self.tmpview = useTempView
 
         if name != None:

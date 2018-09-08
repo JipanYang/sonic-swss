@@ -84,6 +84,11 @@ void syncd_apply_view()
 {
     SWSS_LOG_NOTICE("Notify syncd APPLY_VIEW");
 
+    // skip view op for warm start
+    if ( WarmStart::isWarmStart() )
+    {
+        return;
+    }
     sai_status_t status;
     sai_attribute_t attr;
     attr.id = SAI_REDIS_SWITCH_ATTR_NOTIFY_SYNCD;
@@ -275,7 +280,6 @@ int main(int argc, char **argv)
     DBConnector state_db(STATE_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
 
     auto orchDaemon = make_shared<OrchDaemon>(&appl_db, &config_db, &state_db);
-    syncd_apply_view();
 
     try
     {
@@ -284,7 +288,7 @@ int main(int argc, char **argv)
             SWSS_LOG_ERROR("Failed to initialize orchstration daemon");
             exit(EXIT_FAILURE);
         }
-
+        syncd_apply_view();
         orchDaemon->start();
     }
     catch (char const *e)
