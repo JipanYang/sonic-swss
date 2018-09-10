@@ -4,8 +4,6 @@
 #include "netdispatcher.h"
 #include "netlink.h"
 #include "neighsyncd/neighsync.h"
-#include "warm_restart.h"
-#include <time.h>
 
 using namespace std;
 using namespace swss;
@@ -16,12 +14,8 @@ int main(int argc, char **argv)
 
     DBConnector appDb(APPL_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
     RedisPipeline pipelineAppDB(&appDb);
-    DBConnector confDb(CONFIG_DB, DBConnector::DEFAULT_UNIXSOCKET, 0);
-    RedisPipeline pipelineConfDB(&confDb);
 
-    WarmStart::checkWarmStart("neighsyncd");
-
-    NeighSync sync(&pipelineAppDB, &pipelineConfDB);
+    NeighSync sync(&pipelineAppDB);
 
     NetDispatcher::getInstance().registerMessageHandler(RTM_NEWNEIGH, &sync);
     NetDispatcher::getInstance().registerMessageHandler(RTM_DELNEIGH, &sync);
@@ -38,14 +32,22 @@ int main(int argc, char **argv)
             netlink.dumpRequest(RTM_GETNEIGH);
 
             s.addSelectable(&netlink);
-            sync.readTableToMap();
+            if (sync.getRestartAssist()->isWarmStartInProgress())
+            {
+                sync.getRestartAssist()->readTableToMap();
+                sync.getRestartAssist()->startReconcileTimer(s);
+            }
             while (true)
             {
                 Selectable *temps;
-                s.select(&temps, SELECT_TIMEOUT);
-                if (sync.checkReconcile())
+                s.select(&temps);
+                if (sync.getRestartAssist()->isWarmStartInProgress())
                 {
-                    sync.reconcile(sync.get_ps_table());
+                    if (sync.getRestartAssist()->checkReconcileTimer(temps))
+                    {
+                        sync.getRestartAssist()->stopReconcileTimer(s);
+                        sync.getRestartAssist()->reconcile();
+                    }
                 }
             }
         }

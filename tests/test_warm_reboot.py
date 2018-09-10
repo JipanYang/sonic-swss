@@ -64,6 +64,20 @@ def swss_app_check_RestartCount_single(state_db, restart_count, name):
             elif fv[0] == "state":
                 assert fv[1] == "reconciled"
 
+def swss_app_check_warmstart_state(state_db, name, state):
+    warmtbl = swsscommon.Table(state_db, swsscommon.STATE_WARM_RESTART_TABLE_NAME)
+    keys = warmtbl.getKeys()
+    print(keys)
+    assert  len(keys) > 0
+    for key in keys:
+        if key != name:
+            continue
+        (status, fvs) = warmtbl.get(key)
+        assert status == True
+        for fv in fvs:
+            if fv[0] == "state":
+                assert fv[1] == state
+
 def create_entry(tbl, key, pairs):
     fvs = swsscommon.FieldValuePairs(pairs)
     tbl.set(key, fvs)
@@ -175,9 +189,6 @@ def test_swss_warm_restore(dvs):
     swss_check_RestartCount(state_db, restart_count)
 
 def test_swss_port_state_syncup(dvs):
-    # syncd warm start with temp view not supported yet
-    if dvs.tmpview == True:
-        return
 
     dvs.runcmd("config warm_restart enable swss")
     # hostcfgd not running in VS, create the folder explicitly
@@ -306,81 +317,6 @@ def test_swss_fdb_syncup_and_crm(dvs):
     assert used_counter == 1
 
 
-def test_PortSyncdWarmRestart(dvs):
-
-    dvs.runcmd("config warm_restart enable swss")
-    # hostcfgd not running in VS, create the folder explicitly
-    dvs.runcmd("mkdir -p /etc/sonic/warm_restart/swss")
-
-    conf_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
-    appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
-    state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
-
-
-    dvs.runcmd("ifconfig Ethernet16  up")
-    dvs.runcmd("ifconfig Ethernet20  up")
-
-    time.sleep(1)
-
-    dvs.runcmd("ifconfig Ethernet16 11.0.0.1/29 up")
-    dvs.runcmd("ifconfig Ethernet20 11.0.0.9/29 up")
-
-    dvs.servers[4].runcmd("ip link set down dev eth0") == 0
-    dvs.servers[4].runcmd("ip link set up dev eth0") == 0
-    dvs.servers[4].runcmd("ifconfig eth0 11.0.0.2/29")
-    dvs.servers[4].runcmd("ip route add default via 11.0.0.1")
-
-    dvs.servers[5].runcmd("ip link set down dev eth0") == 0
-    dvs.servers[5].runcmd("ip link set up dev eth0") == 0
-    dvs.servers[5].runcmd("ifconfig eth0 11.0.0.10/29")
-    dvs.servers[5].runcmd("ip route add default via 11.0.0.9")
-
-    time.sleep(1)
-
-    # Ethernet port oper status should be up
-    check_port_oper_status(appl_db, "Ethernet16", "up")
-    check_port_oper_status(appl_db, "Ethernet20", "up")
-
-    # Ping should work between servers via vs vlan interfaces
-    ping_stats = dvs.servers[4].runcmd("ping -c 1 11.0.0.10")
-    time.sleep(1)
-
-    neighTbl = swsscommon.Table(appl_db, "NEIGH_TABLE")
-    (status, fvs) = neighTbl.get("Ethernet16:11.0.0.2")
-    assert status == True
-
-    (status, fvs) = neighTbl.get("Ethernet20:11.0.0.10")
-    assert status == True
-
-    restart_count = swss_get_RestartCount(state_db)
-
-    # restart portsyncd
-    dvs.runcmd(['sh', '-c', 'pkill -x portsyncd; cp /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b; echo > /var/log/swss/sairedis.rec'])
-    dvs.runcmd(['sh', '-c', 'supervisorctl start portsyncd'])
-    time.sleep(2)
-
-    checkCleanSaiRedisCSR(dvs)
-
-    #new ip on server 5
-    dvs.servers[5].runcmd("ifconfig eth0 11.0.0.11/29")
-
-    # Ping should work between servers via vs Ethernet interfaces
-    ping_stats = dvs.servers[4].runcmd("ping -c 1 11.0.0.11")
-
-    # new neighbor learn on VS
-    (status, fvs) = neighTbl.get("Ethernet20:11.0.0.11")
-    assert status == True
-
-    # Port state change reflected in appDB correctly
-    dvs.servers[6].runcmd("ip link set down dev eth0") == 0
-    dvs.servers[6].runcmd("ip link set up dev eth0") == 0
-    time.sleep(1)
-
-    check_port_oper_status(appl_db, "Ethernet16", "up")
-    check_port_oper_status(appl_db, "Ethernet20", "up")
-    check_port_oper_status(appl_db, "Ethernet24", "up")
-
-    swss_app_check_RestartCount_single(state_db, restart_count, "portsyncd")
 
 
 def test_PortSyncdWarmRestart(dvs):
@@ -577,27 +513,37 @@ def test_VlanMgrdWarmRestart(dvs):
     swss_app_check_RestartCount_single(state_db, restart_count, "vlanmgrd")
 
 
-# function to stop swss service and clear syslog and sairedis records
-def stop_swss_clear_syslog_sairedis(dvs, save_number):
-    dvs.runcmd("/usr/bin/stop_swss.sh")
-    time.sleep(3)
-    dvs.runcmd("mv /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.back1")
+# function to stop neighsyncd service and clear syslog and sairedis records
+def stop_neighsyncd_clear_syslog_sairedis(dvs, save_number):
+    dvs.runcmd(['sh', '-c', 'pkill -x neighsyncd'])
+    dvs.runcmd("cp /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.back{}".format(save_number))
+    dvs.runcmd(['sh', '-c', '> /var/log/swss/sairedis.rec'])
     dvs.runcmd("cp /var/log/syslog /var/log/syslog.back{}".format(save_number))
     dvs.runcmd(['sh', '-c', '> /var/log/syslog'])
 
+def start_neighsyncd(dvs):
+    dvs.runcmd(['sh', '-c', 'supervisorctl start neighsyncd'])
+
+def check_no_neighsyncd_timer(dvs):
+    (exitcode, string) = dvs.runcmd(['sh', '-c', 'grep getWarmStartTimer /var/log/syslog | grep neighsyncd | grep invalid'])
+    assert string.strip() != ""
+
+def check_neighsyncd_timer(dvs, timer_value):
+    (exitcode, num) = dvs.runcmd(['sh', '-c', "grep getWarmStartTimer /var/log/syslog | grep neighsyncd | rev | cut -d ' ' -f 1 | rev"])
+    assert num.strip() == timer_value
 
 # function to check neighbor entry reconciliation status written in syslog
 def check_syslog_for_neighbor_entry(dvs, new_cnt, delete_cnt, iptype):
     # check reconciliation results (new or delete entries) for ipv4 and ipv6
     if iptype == "ipv4":
-        num = dvs.runcmd(['sh', '-c', 'grep neighsyncd /var/log/syslog| grep cache-state:NEW | grep IPv4 | wc -l'])
+        (exitcode, num) = dvs.runcmd(['sh', '-c', 'grep neighsyncd /var/log/syslog| grep cache-state:NEW | grep IPv4 | wc -l'])
         assert num.strip() == str(new_cnt)
-        num = dvs.runcmd(['sh', '-c', 'grep neighsyncd /var/log/syslog| grep cache-state:DELETE | grep IPv4 | wc -l'])
+        (exitcode, num) = dvs.runcmd(['sh', '-c', 'grep neighsyncd /var/log/syslog| grep cache-state:DELETE | grep IPv4 | wc -l'])
         assert num.strip() == str(delete_cnt)
     elif iptype == "ipv6":
-        num = dvs.runcmd(['sh', '-c', 'grep neighsyncd /var/log/syslog| grep cache-state:NEW | grep IPv6 | wc -l'])
+        (exitcode, num) = dvs.runcmd(['sh', '-c', 'grep neighsyncd /var/log/syslog| grep cache-state:NEW | grep IPv6 | wc -l'])
         assert num.strip() == str(new_cnt)
-        num = dvs.runcmd(['sh', '-c', 'grep neighsyncd /var/log/syslog| grep cache-state:DELETE | grep IPv6 | wc -l'])
+        (exitcode, num) = dvs.runcmd(['sh', '-c', 'grep neighsyncd /var/log/syslog| grep cache-state:DELETE | grep IPv6 | wc -l'])
         assert num.strip() == str(delete_cnt)
     else:
         assert "iptype is unknown" == ""
@@ -606,28 +552,29 @@ def check_syslog_for_neighbor_entry(dvs, new_cnt, delete_cnt, iptype):
 # function to check sairedis record for neighbor entries
 def check_sairedis_for_neighbor_entry(dvs, create_cnt, set_cnt, remove_cnt):
     # check create/set/remove operations for neighbor entries during warm restart
-    num = dvs.runcmd(['sh', '-c', 'grep \|c\| /var/log/swss/sairedis.rec | grep NEIGHBOR_ENTRY | wc -l'])
+    (exitcode, num) = dvs.runcmd(['sh', '-c', 'grep \|c\| /var/log/swss/sairedis.rec | grep NEIGHBOR_ENTRY | wc -l'])
     assert num.strip() == str(create_cnt)
-    num = dvs.runcmd(['sh', '-c', 'grep \|s\| /var/log/swss/sairedis.rec | grep NEIGHBOR_ENTRY | wc -l'])
+    (exitcode, num) = dvs.runcmd(['sh', '-c', 'grep \|s\| /var/log/swss/sairedis.rec | grep NEIGHBOR_ENTRY | wc -l'])
     assert num.strip() == str(set_cnt)
-    num = dvs.runcmd(['sh', '-c', 'grep \|r\| /var/log/swss/sairedis.rec | grep NEIGHBOR_ENTRY | wc -l'])
+    (exitcode, num) = dvs.runcmd(['sh', '-c', 'grep \|r\| /var/log/swss/sairedis.rec | grep NEIGHBOR_ENTRY | wc -l'])
     assert num.strip() == str(remove_cnt)
 
 
 def test_swss_neighbor_syncup(dvs):
-    # syncd warm start with temp view not supported yet
-    if dvs.tmpview == True:
-        return
 
-    dvs.runcmd("config warm_restart enable swss")
-    # hostcfgd not running in VS, create the folder explicitly
-    dvs.runcmd("mkdir -p /etc/sonic/warm_restart/swss")
-
-    # Prepare neighbor entry before swss stop
     appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
-    asic_db = swsscommon.DBConnector(swsscommon.ASIC_DB, dvs.redis_sock, 0)
     conf_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
     state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
+
+    # enable warm restart
+    # TODO: use cfg command to config it
+    create_entry_tbl(
+        conf_db,
+        swsscommon.CFG_WARM_RESTART_TABLE_NAME, "swss",
+        [
+            ("enable", "true"),
+        ]
+    )
 
     #
     # Testcase1:
@@ -684,20 +631,18 @@ def test_swss_neighbor_syncup(dvs):
 
     #
     # Testcase 2:
-    # Restart swss without change neighbor entries, nothing should be sent to appDB or sairedis,
+    # Restart neighsyncd without change neighbor entries, nothing should be sent to appDB or sairedis,
     # appDB should be kept the same.
     #
 
+    # get restart_count
     restart_count = swss_get_RestartCount(state_db)
 
-    # stop swss service and clear syslog and sairedis.rec
-    stop_swss_clear_syslog_sairedis(dvs, 1)
+    # stop neighsyncd and clear syslog and sairedis.rec
+    stop_neighsyncd_clear_syslog_sairedis(dvs, 1)
 
-    dvs.runcmd("/usr/bin/start_swss.sh")
+    start_neighsyncd(dvs)
     time.sleep(10)
-
-    # check restart_count for each process in SWSS
-    swss_check_RestartCount(state_db, restart_count)
 
     # Check the neighbor entries are still in appDB correctly
     for i in range(len(ips)):
@@ -725,31 +670,33 @@ def test_swss_neighbor_syncup(dvs):
     check_syslog_for_neighbor_entry(dvs, 0, 0, "ipv6")
     check_sairedis_for_neighbor_entry(dvs, 0, 0, 0)
 
+    # check restart Count
+    swss_app_check_RestartCount_single(state_db, restart_count, "neighsyncd")
+
     #
     # Testcase 3:
-    # stop swss, delete even nummber ipv4/ipv6 neighbor entries from each interface, warm start swss.
+    # stop neighsyncd, delete even nummber ipv4/ipv6 neighbor entries from each interface, warm start neighsyncd.
     # the neighsyncd is supposed to sync up the entries from kernel after warm restart
     # note: there was an issue for neighbor delete, it will be marked as FAILED instead of deleted in kernel
     #       but it will send netlink message to be removed from appDB, so it works ok here,
     #       just that if we want to add the same neighbor again, use "change" instead of "add"
 
+    # get restart_count
     restart_count = swss_get_RestartCount(state_db)
-    # stop swss service and clear syslog and sairedis.rec
-    stop_swss_clear_syslog_sairedis(dvs, 2)
 
-    # deledelete even nummber of ipv4/ipv6 neighbor entries from each interface
+    # stop neighsyncd and clear syslog and sairedis.rec
+    stop_neighsyncd_clear_syslog_sairedis(dvs, 2)
+
+    # delete even nummber of ipv4/ipv6 neighbor entries from each interface
     for i in range(0, len(ips), 2):
         dvs.runcmd("ip neigh del {} dev {}".format(ips[i], intfs[i%2]))
 
     for i in range(0, len(v6ips), 2):
         dvs.runcmd("ip -6 neigh del {} dev {}".format(v6ips[i], intfs[i%2]))
 
-    # start swss service again
-    dvs.runcmd("/usr/bin/start_swss.sh")
+    # start neighsyncd again
+    start_neighsyncd(dvs)
     time.sleep(10)
-
-    # check restart_count for each process in SWSS
-    swss_check_RestartCount(state_db, restart_count)
 
     # check ipv4 and ipv6 neighbors
     for i in range(len(ips)):
@@ -790,16 +737,22 @@ def test_swss_neighbor_syncup(dvs):
     check_syslog_for_neighbor_entry(dvs, 0, 2, "ipv4")
     check_syslog_for_neighbor_entry(dvs, 0, 2, "ipv6")
     check_sairedis_for_neighbor_entry(dvs, 0, 0, 4)
+    # check restart Count
+    swss_app_check_RestartCount_single(state_db, restart_count, "neighsyncd")
+
 
     #
     # Testcase 4:
-    # Stop swss, add even nummber of ipv4/ipv6 neighbor entries to each interface again,
-    # use "change" due to the kernel behaviour, start swss.
+    # Stop neighsyncd, add even nummber of ipv4/ipv6 neighbor entries to each interface again,
+    # use "change" due to the kernel behaviour, start neighsyncd.
     # The neighsyncd is supposed to sync up the entries from kernel after warm restart
+    # Check the timer is not retrieved from configDB since it is not configured
 
+    # get restart_count
     restart_count = swss_get_RestartCount(state_db)
-    # stop swss service and clear syslog and sairedis.rec
-    stop_swss_clear_syslog_sairedis(dvs, 3)
+
+    # stop neighsyncd and clear syslog and sairedis.rec
+    stop_neighsyncd_clear_syslog_sairedis(dvs, 3)
 
     # add even nummber of ipv4/ipv6 neighbor entries to each interface
     for i in range(0, len(ips), 2):
@@ -808,12 +761,12 @@ def test_swss_neighbor_syncup(dvs):
     for i in range(0, len(v6ips), 2):
         dvs.runcmd("ip -6 neigh change {} dev {} lladdr {}".format(v6ips[i], intfs[i%2], macs[i]))
 
-    # start swss service again
-    dvs.runcmd("/usr/bin/start_swss.sh")
+    # start neighsyncd again
+    start_neighsyncd(dvs)
     time.sleep(10)
 
-    # check restart_count for each process in SWSS
-    swss_check_RestartCount(state_db, restart_count)
+    # no neighsyncd timer configured
+    check_no_neighsyncd_timer(dvs)
 
     # check ipv4 and ipv6 neighbors, should see all neighbors
     for i in range(len(ips)):
@@ -840,16 +793,32 @@ def test_swss_neighbor_syncup(dvs):
     check_syslog_for_neighbor_entry(dvs, 2, 0, "ipv4")
     check_syslog_for_neighbor_entry(dvs, 2, 0, "ipv6")
     check_sairedis_for_neighbor_entry(dvs, 4, 0, 0)
+    # check restart Count
+    swss_app_check_RestartCount_single(state_db, restart_count, "neighsyncd")
 
     #
     # Testcase 5:
     # Even number of ip4/6 neigbors updated with new mac.
     # Odd number of ipv4/6 neighbors removed and added to different interfaces.
     # neighbor syncd should sync it up after warm restart
+    # include the timer settings in this testcase
 
+    # setup timer in configDB
+    timer_value = "15"
+
+    create_entry_tbl(
+        conf_db,
+        swsscommon.CFG_WARM_RESTART_TABLE_NAME, "swss",
+        [
+            ("neighsyncd_timer", timer_value),
+        ]
+    )
+
+    # get restart_count
     restart_count = swss_get_RestartCount(state_db)
-    # stop swss service and clear syslog and sairedis.rec
-    stop_swss_clear_syslog_sairedis(dvs, 4)
+
+    # stop neighsyncd and clear syslog and sairedis.rec
+    stop_neighsyncd_clear_syslog_sairedis(dvs, 4)
 
     # Even number of ip4/6 neigbors updated with new mac.
     # Odd number of ipv4/6 neighbors removed and added to different interfaces.
@@ -869,12 +838,16 @@ def test_swss_neighbor_syncup(dvs):
             dvs.runcmd("ip -6 neigh del {} dev {}".format(v6ips[i], intfs[i%2]))
             dvs.runcmd("ip -6 neigh add {} dev {} lladdr {}".format(v6ips[i], intfs[1-i%2], macs[i]))
 
-    # start swss service again
-    dvs.runcmd("/usr/bin/start_swss.sh")
+    # start neighsyncd again
+    start_neighsyncd(dvs)
     time.sleep(10)
 
-    # check restart_count for each process in SWSS
-    swss_check_RestartCount(state_db, restart_count)
+    # timer is not expired yet, state should be "restored"
+    swss_app_check_warmstart_state(state_db, "neighsyncd", "restored")
+    time.sleep(10)
+
+    # check neigh syncd timer is retrived from configDB
+    check_neighsyncd_timer(dvs, timer_value)
 
     # check ipv4 and ipv6 neighbors, should see all neighbors with updated info
     for i in range(len(ips)):
@@ -919,5 +892,5 @@ def test_swss_neighbor_syncup(dvs):
     check_syslog_for_neighbor_entry(dvs, 4, 2, "ipv4")
     check_syslog_for_neighbor_entry(dvs, 4, 2, "ipv6")
     check_sairedis_for_neighbor_entry(dvs, 4, 4, 4)
-
-    dvs.runcmd("config warm_restart disable swss")
+    # check restart Count
+    swss_app_check_RestartCount_single(state_db, restart_count, "neighsyncd")
