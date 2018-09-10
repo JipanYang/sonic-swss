@@ -416,7 +416,7 @@ bool OrchDaemon::warmRestoreAndSyncUp()
     SWSS_LOG_NOTICE("Orchagent state restore done");
 
     /* Start dynamic state sync up */
-    gPortsOrch->syncUpPortState();
+    gPortsOrch->refreshPortStatus();
     gFdbOrch->syncUpFdb();
 
     /*
