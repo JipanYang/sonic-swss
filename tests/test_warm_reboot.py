@@ -120,205 +120,6 @@ def checkCleanSaiRedisCSR(dvs):
     (exitcode, num) = dvs.runcmd(['sh', '-c', 'grep \|r\| /var/log/swss/sairedis.rec | wc -l'])
     assert num == '0\n'
 
-# TODO: This test case fails sometimes due to left over arp delete message from kernel.
-# TODO: The condition of warm restart readiness check is still under discussion.
-def test_OrchagentWarmRestartReadyCheck(dvs):
-
-    # do a pre-cleanup
-    dvs.runcmd("ip -s -s neigh flush all")
-    time.sleep(1)
-
-    dvs.runcmd("config warm_restart enable swss")
-
-    dvs.runcmd("ifconfig Ethernet0 10.0.0.0/31 up")
-    dvs.runcmd("ifconfig Ethernet4 10.0.0.2/31 up")
-
-    dvs.servers[0].runcmd("ifconfig eth0 10.0.0.1/31")
-    dvs.servers[0].runcmd("ip route add default via 10.0.0.0")
-
-    dvs.servers[1].runcmd("ifconfig eth0 10.0.0.3/31")
-    dvs.servers[1].runcmd("ip route add default via 10.0.0.2")
-
-
-    appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
-    ps = swsscommon.ProducerStateTable(appl_db, swsscommon.APP_ROUTE_TABLE_NAME)
-    fvs = swsscommon.FieldValuePairs([("nexthop","10.0.0.1"), ("ifname", "Ethernet0")])
-
-    ps.set("2.2.2.0/24", fvs)
-
-    time.sleep(1)
-    # Should fail, since neighbor for next 10.0.0.1 has not been not resolved yet
-    (exitcode, result) =  dvs.runcmd("/usr/bin/orchagent_restart_check")
-    assert result == "RESTARTCHECK failed\n"
-
-    # Should succeed, the option for skipPendingTaskCheck -s and noFreeze -n have been provided.
-    # Wait up to 500 milliseconds for response from orchagent. Default wait time is 1000 milliseconds.
-    (exitcode, result) =  dvs.runcmd("/usr/bin/orchagent_restart_check -n -s -w 500")
-    assert result == "RESTARTCHECK succeeded\n"
-
-    # get neighbor and arp entry
-    dvs.servers[1].runcmd("ping -c 1 10.0.0.1")
-
-    time.sleep(1)
-    (exitcode, result) =  dvs.runcmd("/usr/bin/orchagent_restart_check")
-    assert result == "RESTARTCHECK succeeded\n"
-
-    # Should fail since orchagent has been frozen at last step.
-    (exitcode, result) =  dvs.runcmd("/usr/bin/orchagent_restart_check -n -s -w 500")
-    assert result == "RESTARTCHECK failed\n"
-
-def test_swss_warm_restore(dvs):
-
-    # syncd warm start with temp view not supported yet
-    if dvs.tmpview == True:
-        return
-    dvs.runcmd("config warm_restart enable swss")
-    # hostcfgd not running in VS, create the folder explicitly
-    dvs.runcmd("mkdir -p /etc/sonic/warm_restart/swss")
-
-    state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
-    restart_count = swss_get_RestartCount(state_db)
-    dvs.runcmd("/usr/bin/stop_swss.sh")
-    time.sleep(5)
-    dvs.runcmd("mv /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b")
-    dvs.runcmd("/usr/bin/start_swss.sh")
-    time.sleep(10)
-
-    checkCleanSaiRedisCSR(dvs)
-
-    swss_check_RestartCount(state_db, restart_count)
-
-def test_swss_port_state_syncup(dvs):
-
-    dvs.runcmd("config warm_restart enable swss")
-    # hostcfgd not running in VS, create the folder explicitly
-    dvs.runcmd("mkdir -p /etc/sonic/warm_restart/swss")
-
-    appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
-    state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
-
-    restart_count = swss_get_RestartCount(state_db)
-    dvs.runcmd("/usr/bin/stop_swss.sh")
-    time.sleep(3)
-    dvs.runcmd("mv /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b")
-
-    # Change port state before swss up again
-    dvs.runcmd("ifconfig Ethernet0 10.0.0.0/31 up")
-    dvs.runcmd("ifconfig Ethernet4 10.0.0.2/31 up")
-    dvs.runcmd("ifconfig Ethernet8 10.0.0.4/31 up")
-
-    dvs.runcmd("arp -s 10.0.0.1 00:00:00:00:00:01")
-    dvs.runcmd("arp -s 10.0.0.3 00:00:00:00:00:02")
-    dvs.runcmd("arp -s 10.0.0.5 00:00:00:00:00:03")
-
-    dvs.servers[0].runcmd("ip link set down dev eth0") == 0
-    dvs.servers[1].runcmd("ip link set down dev eth0") == 0
-    dvs.servers[2].runcmd("ip link set down dev eth0") == 0
-    dvs.servers[2].runcmd("ip link set up dev eth0") == 0
-
-    time.sleep(1)
-    dvs.runcmd("/usr/bin/start_swss.sh")
-    time.sleep(10)
-
-    swss_check_RestartCount(state_db, restart_count)
-
-    tbl = swsscommon.Table(appl_db, swsscommon.APP_PORT_TABLE_NAME)
-
-    for i in [0, 1, 2]:
-        (status, fvs) = tbl.get("Ethernet%d" % (i * 4))
-        assert status == True
-
-        oper_status = "unknown"
-
-        for v in fvs:
-            if v[0] == "oper_status":
-                oper_status = v[1]
-                break
-        if i == 2:
-            assert oper_status == "up"
-        else:
-            assert oper_status == "down"
-
-
-def test_swss_fdb_syncup_and_crm(dvs):
-    # syncd warm start with temp view not supported yet
-    if dvs.tmpview == True:
-        return
-
-    dvs.runcmd("config warm_restart enable swss")
-
-    # Prepare FDB entry before swss stop
-    appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
-    asic_db = swsscommon.DBConnector(swsscommon.ASIC_DB, dvs.redis_sock, 0)
-    conf_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
-    state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
-
-    # create a FDB entry in Application DB
-    create_entry_pst(
-        appl_db,
-        "FDB_TABLE", "Vlan12:52-54-00-25-06-E9",
-        [
-            ("port", "Ethernet12"),
-            ("type", "dynamic"),
-        ]
-    )
-    # create vlan
-    create_entry_tbl(
-        conf_db,
-        "VLAN", "Vlan12",
-        [
-            ("vlanid", "12"),
-        ]
-    )
-
-    # create vlan member entry in application db. Don't use Ethernet0/4/8 as IP configured on them in previous testing.
-    create_entry_tbl(
-        conf_db,
-        "VLAN_MEMBER", "Vlan12|Ethernet12",
-         [
-            ("tagging_mode", "untagged"),
-         ]
-    )
-    # check that the FDB entry was inserted into ASIC DB
-    assert how_many_entries_exist(asic_db, "ASIC_STATE:SAI_OBJECT_TYPE_FDB_ENTRY") == 1, "The fdb entry wasn't inserted to ASIC"
-
-    dvs.runcmd("crm config polling interval 1")
-    time.sleep(2)
-    # get counters
-    used_counter = getCrmCounterValue(dvs, 'STATS', 'crm_stats_fdb_entry_used')
-    assert used_counter == 1
-
-    # Change the polling interval to 20 so we may see the crm counter changes after warm restart
-    dvs.runcmd("crm config polling interval 20")
-
-    restart_count = swss_get_RestartCount(state_db)
-
-    dvs.runcmd("/usr/bin/stop_swss.sh")
-
-
-    # delete the FDB entry in AppDB before swss is started again,
-    # the orchagent is supposed to sync up the entry from ASIC DB after warm restart
-    del_entry_tbl(appl_db, "FDB_TABLE", "Vlan12:52-54-00-25-06-E9")
-
-
-    time.sleep(1)
-    dvs.runcmd("/usr/bin/start_swss.sh")
-    time.sleep(10)
-
-    swss_check_RestartCount(state_db, restart_count)
-
-    # get counters for FDB entries, it should be 0
-    used_counter = getCrmCounterValue(dvs, 'STATS', 'crm_stats_fdb_entry_used')
-    assert used_counter == 0
-    dvs.runcmd("crm config polling interval 10")
-    time.sleep(20)
-     # get counters for FDB entries, it should be 1
-    used_counter = getCrmCounterValue(dvs, 'STATS', 'crm_stats_fdb_entry_used')
-    assert used_counter == 1
-
-
-
-
 def test_PortSyncdWarmRestart(dvs):
 
     conf_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
@@ -894,3 +695,202 @@ def test_swss_neighbor_syncup(dvs):
     check_sairedis_for_neighbor_entry(dvs, 4, 4, 4)
     # check restart Count
     swss_app_check_RestartCount_single(state_db, restart_count, "neighsyncd")
+
+
+# TODO: This test case fails sometimes due to left over arp delete message from kernel.
+# TODO: The condition of warm restart readiness check is still under discussion.
+def test_OrchagentWarmRestartReadyCheck(dvs):
+
+    # do a pre-cleanup
+    dvs.runcmd("ip -s -s neigh flush all")
+    time.sleep(1)
+
+    dvs.runcmd("config warm_restart enable swss")
+
+    dvs.runcmd("ifconfig Ethernet0 10.0.0.0/31 up")
+    dvs.runcmd("ifconfig Ethernet4 10.0.0.2/31 up")
+
+    dvs.servers[0].runcmd("ifconfig eth0 10.0.0.1/31")
+    dvs.servers[0].runcmd("ip route add default via 10.0.0.0")
+
+    dvs.servers[1].runcmd("ifconfig eth0 10.0.0.3/31")
+    dvs.servers[1].runcmd("ip route add default via 10.0.0.2")
+
+
+    appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
+    ps = swsscommon.ProducerStateTable(appl_db, swsscommon.APP_ROUTE_TABLE_NAME)
+    fvs = swsscommon.FieldValuePairs([("nexthop","10.0.0.1"), ("ifname", "Ethernet0")])
+
+    ps.set("2.2.2.0/24", fvs)
+
+    time.sleep(1)
+    # Should fail, since neighbor for next 10.0.0.1 has not been not resolved yet
+    (exitcode, result) =  dvs.runcmd("/usr/bin/orchagent_restart_check")
+    assert result == "RESTARTCHECK failed\n"
+
+    # Should succeed, the option for skipPendingTaskCheck -s and noFreeze -n have been provided.
+    # Wait up to 500 milliseconds for response from orchagent. Default wait time is 1000 milliseconds.
+    (exitcode, result) =  dvs.runcmd("/usr/bin/orchagent_restart_check -n -s -w 500")
+    assert result == "RESTARTCHECK succeeded\n"
+
+    # get neighbor and arp entry
+    dvs.servers[1].runcmd("ping -c 1 10.0.0.1")
+
+    time.sleep(1)
+    (exitcode, result) =  dvs.runcmd("/usr/bin/orchagent_restart_check")
+    assert result == "RESTARTCHECK succeeded\n"
+
+    # Should fail since orchagent has been frozen at last step.
+    (exitcode, result) =  dvs.runcmd("/usr/bin/orchagent_restart_check -n -s -w 500")
+    assert result == "RESTARTCHECK failed\n"
+
+def test_swss_warm_restore(dvs):
+
+    # syncd warm start with temp view not supported yet
+    if dvs.tmpview == True:
+        return
+    dvs.runcmd("config warm_restart enable swss")
+    # hostcfgd not running in VS, create the folder explicitly
+    dvs.runcmd("mkdir -p /etc/sonic/warm_restart/swss")
+
+    state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
+    restart_count = swss_get_RestartCount(state_db)
+    dvs.runcmd("/usr/bin/stop_swss.sh")
+    time.sleep(5)
+    dvs.runcmd("mv /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b")
+    dvs.runcmd("/usr/bin/start_swss.sh")
+    time.sleep(10)
+
+    checkCleanSaiRedisCSR(dvs)
+
+    swss_check_RestartCount(state_db, restart_count)
+
+
+def test_swss_port_state_syncup(dvs):
+
+    dvs.runcmd("config warm_restart enable swss")
+    # hostcfgd not running in VS, create the folder explicitly
+    dvs.runcmd("mkdir -p /etc/sonic/warm_restart/swss")
+
+    appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
+    state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
+
+    restart_count = swss_get_RestartCount(state_db)
+    dvs.runcmd("/usr/bin/stop_swss.sh")
+    time.sleep(3)
+    dvs.runcmd("mv /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b")
+
+    # Change port state before swss up again
+    dvs.runcmd("ifconfig Ethernet0 10.0.0.0/31 up")
+    dvs.runcmd("ifconfig Ethernet4 10.0.0.2/31 up")
+    dvs.runcmd("ifconfig Ethernet8 10.0.0.4/31 up")
+
+    dvs.runcmd("arp -s 10.0.0.1 00:00:00:00:00:01")
+    dvs.runcmd("arp -s 10.0.0.3 00:00:00:00:00:02")
+    dvs.runcmd("arp -s 10.0.0.5 00:00:00:00:00:03")
+
+    dvs.servers[0].runcmd("ip link set down dev eth0") == 0
+    dvs.servers[1].runcmd("ip link set down dev eth0") == 0
+    dvs.servers[2].runcmd("ip link set down dev eth0") == 0
+    dvs.servers[2].runcmd("ip link set up dev eth0") == 0
+
+    time.sleep(1)
+    dvs.runcmd("/usr/bin/start_swss.sh")
+    time.sleep(10)
+
+    swss_check_RestartCount(state_db, restart_count)
+
+    tbl = swsscommon.Table(appl_db, swsscommon.APP_PORT_TABLE_NAME)
+
+    for i in [0, 1, 2]:
+        (status, fvs) = tbl.get("Ethernet%d" % (i * 4))
+        assert status == True
+
+        oper_status = "unknown"
+
+        for v in fvs:
+            if v[0] == "oper_status":
+                oper_status = v[1]
+                break
+        if i == 2:
+            assert oper_status == "up"
+        else:
+            assert oper_status == "down"
+
+
+def test_swss_fdb_syncup_and_crm(dvs):
+    # syncd warm start with temp view not supported yet
+    if dvs.tmpview == True:
+        return
+
+    dvs.runcmd("config warm_restart enable swss")
+
+    # Prepare FDB entry before swss stop
+    appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
+    asic_db = swsscommon.DBConnector(swsscommon.ASIC_DB, dvs.redis_sock, 0)
+    conf_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
+    state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
+
+    # create a FDB entry in Application DB
+    create_entry_pst(
+        appl_db,
+        "FDB_TABLE", "Vlan12:52-54-00-25-06-E9",
+        [
+            ("port", "Ethernet12"),
+            ("type", "dynamic"),
+        ]
+    )
+    # create vlan
+    create_entry_tbl(
+        conf_db,
+        "VLAN", "Vlan12",
+        [
+            ("vlanid", "12"),
+        ]
+    )
+
+    # create vlan member entry in application db. Don't use Ethernet0/4/8 as IP configured on them in previous testing.
+    create_entry_tbl(
+        conf_db,
+        "VLAN_MEMBER", "Vlan12|Ethernet12",
+         [
+            ("tagging_mode", "untagged"),
+         ]
+    )
+    # check that the FDB entry was inserted into ASIC DB
+    assert how_many_entries_exist(asic_db, "ASIC_STATE:SAI_OBJECT_TYPE_FDB_ENTRY") == 1, "The fdb entry wasn't inserted to ASIC"
+
+    dvs.runcmd("crm config polling interval 1")
+    time.sleep(2)
+    # get counters
+    used_counter = getCrmCounterValue(dvs, 'STATS', 'crm_stats_fdb_entry_used')
+    assert used_counter == 1
+
+    # Change the polling interval to 20 so we may see the crm counter changes after warm restart
+    dvs.runcmd("crm config polling interval 20")
+
+    restart_count = swss_get_RestartCount(state_db)
+
+    dvs.runcmd("/usr/bin/stop_swss.sh")
+
+
+    # delete the FDB entry in AppDB before swss is started again,
+    # the orchagent is supposed to sync up the entry from ASIC DB after warm restart
+    del_entry_tbl(appl_db, "FDB_TABLE", "Vlan12:52-54-00-25-06-E9")
+
+
+    time.sleep(1)
+    dvs.runcmd("/usr/bin/start_swss.sh")
+    time.sleep(10)
+
+    swss_check_RestartCount(state_db, restart_count)
+
+    # get counters for FDB entries, it should be 0
+    used_counter = getCrmCounterValue(dvs, 'STATS', 'crm_stats_fdb_entry_used')
+    assert used_counter == 0
+    dvs.runcmd("crm config polling interval 10")
+    time.sleep(20)
+     # get counters for FDB entries, it should be 1
+    used_counter = getCrmCounterValue(dvs, 'STATS', 'crm_stats_fdb_entry_used')
+    assert used_counter == 1
+
