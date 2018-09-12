@@ -4,6 +4,19 @@ import re
 import time
 import json
 
+# start processes in SWSS
+def start_swss(dvs):
+    dvs.runcmd(['sh', '-c', 'supervisorctl start orchagent; supervisorctl start portsyncd; supervisorctl start intfsyncd; \
+        supervisorctl start neighsyncd; supervisorctl start intfmgrd; supervisorctl start vlanmgrd; \
+        supervisorctl start buffermgrd; supervisorctl start arp_update'])
+
+# stop processes in SWSS
+def stop_swss(dvs):
+    dvs.runcmd(['sh', '-c', 'supervisorctl stop orchagent; supervisorctl stop portsyncd; supervisorctl stop intfsyncd; \
+        supervisorctl stop neighsyncd;  supervisorctl stop intfmgrd; supervisorctl stop vlanmgrd; \
+        supervisorctl stop buffermgrd; supervisorctl stop arp_update'])
+
+
 # Get restart count of all processes supporting warm restart
 def swss_get_RestartCount(state_db):
     restart_count = {}
@@ -316,19 +329,16 @@ def test_VlanMgrdWarmRestart(dvs):
 
 def test_swss_warm_restore(dvs):
 
-    # syncd warm start with temp view not supported yet
-    if dvs.tmpview == True:
-        return
     dvs.runcmd("config warm_restart enable swss")
     # hostcfgd not running in VS, create the folder explicitly
     dvs.runcmd("mkdir -p /etc/sonic/warm_restart/swss")
 
     state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
     restart_count = swss_get_RestartCount(state_db)
-    dvs.runcmd("/usr/bin/stop_swss.sh")
+    stop_swss(dvs)
     time.sleep(5)
     dvs.runcmd("mv /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b")
-    dvs.runcmd("/usr/bin/start_swss.sh")
+    start_swss(dvs)
     time.sleep(10)
 
     checkCleanSaiRedisCSR(dvs)
@@ -776,7 +786,7 @@ def test_swss_port_state_syncup(dvs):
     state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
 
     restart_count = swss_get_RestartCount(state_db)
-    dvs.runcmd("/usr/bin/stop_swss.sh")
+    stop_swss(dvs)
     time.sleep(3)
     dvs.runcmd("mv /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b")
 
@@ -795,7 +805,7 @@ def test_swss_port_state_syncup(dvs):
     dvs.servers[2].runcmd("ip link set up dev eth0") == 0
 
     time.sleep(1)
-    dvs.runcmd("/usr/bin/start_swss.sh")
+    start_swss(dvs)
     time.sleep(10)
 
     swss_check_RestartCount(state_db, restart_count)
@@ -819,9 +829,6 @@ def test_swss_port_state_syncup(dvs):
 
 
 def test_swss_fdb_syncup_and_crm(dvs):
-    # syncd warm start with temp view not supported yet
-    if dvs.tmpview == True:
-        return
 
     dvs.runcmd("config warm_restart enable swss")
 
@@ -871,8 +878,7 @@ def test_swss_fdb_syncup_and_crm(dvs):
 
     restart_count = swss_get_RestartCount(state_db)
 
-    dvs.runcmd("/usr/bin/stop_swss.sh")
-
+    stop_swss(dvs)
 
     # delete the FDB entry in AppDB before swss is started again,
     # the orchagent is supposed to sync up the entry from ASIC DB after warm restart
@@ -880,7 +886,7 @@ def test_swss_fdb_syncup_and_crm(dvs):
 
 
     time.sleep(1)
-    dvs.runcmd("/usr/bin/start_swss.sh")
+    start_swss(dvs)
     time.sleep(10)
 
     swss_check_RestartCount(state_db, restart_count)
