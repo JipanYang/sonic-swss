@@ -774,23 +774,34 @@ def test_OrchagentWarmRestartReadyCheck(dvs):
     # Should fail since orchagent has been frozen at last step.
     (exitcode, result) =  dvs.runcmd("/usr/bin/orchagent_restart_check -n -s -w 500")
     assert result == "RESTARTCHECK failed\n"
-
+    # recover for other test cases.
+    stop_swss(dvs)
+    start_swss(dvs)
+    time.sleep(5)
 
 def test_swss_port_state_syncup(dvs):
 
     dvs.runcmd("config warm_restart enable swss")
-    # hostcfgd not running in VS, create the folder explicitly
-    dvs.runcmd("mkdir -p /etc/sonic/warm_restart/swss")
 
     appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
+    conf_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
     state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
 
-    restart_count = swss_get_RestartCount(state_db)
-    stop_swss(dvs)
-    time.sleep(3)
-    dvs.runcmd("mv /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b")
+    # enable warm restart
+    # TODO: use cfg command to config it
+    create_entry_tbl(
+        conf_db,
+        swsscommon.CFG_WARM_RESTART_TABLE_NAME, "swss",
+        [
+            ("enable", "true"),
+        ]
+    )
 
-    # Change port state before swss up again
+    tbl = swsscommon.Table(appl_db, swsscommon.APP_PORT_TABLE_NAME)
+
+    restart_count = swss_get_RestartCount(state_db)
+
+    # update port admin state
     dvs.runcmd("ifconfig Ethernet0 10.0.0.0/31 up")
     dvs.runcmd("ifconfig Ethernet4 10.0.0.2/31 up")
     dvs.runcmd("ifconfig Ethernet8 10.0.0.4/31 up")
@@ -802,22 +813,15 @@ def test_swss_port_state_syncup(dvs):
     dvs.servers[0].runcmd("ip link set down dev eth0") == 0
     dvs.servers[1].runcmd("ip link set down dev eth0") == 0
     dvs.servers[2].runcmd("ip link set down dev eth0") == 0
+
     dvs.servers[2].runcmd("ip link set up dev eth0") == 0
 
-    time.sleep(1)
-    start_swss(dvs)
-    time.sleep(10)
-
-    swss_check_RestartCount(state_db, restart_count)
-
-    tbl = swsscommon.Table(appl_db, swsscommon.APP_PORT_TABLE_NAME)
+    time.sleep(3)
 
     for i in [0, 1, 2]:
         (status, fvs) = tbl.get("Ethernet%d" % (i * 4))
         assert status == True
-
         oper_status = "unknown"
-
         for v in fvs:
             if v[0] == "oper_status":
                 oper_status = v[1]
@@ -826,6 +830,36 @@ def test_swss_port_state_syncup(dvs):
             assert oper_status == "up"
         else:
             assert oper_status == "down"
+
+    stop_swss(dvs)
+    time.sleep(3)
+
+    # flap the port oper status for Ethernet0, Ethernet4 and Ethernet8
+    dvs.servers[0].runcmd("ip link set down dev eth0") == 0
+    dvs.servers[1].runcmd("ip link set down dev eth0") == 0
+    dvs.servers[2].runcmd("ip link set down dev eth0") == 0
+
+    dvs.servers[0].runcmd("ip link set up dev eth0") == 0
+    dvs.servers[1].runcmd("ip link set up dev eth0") == 0
+
+    time.sleep(5)
+    start_swss(dvs)
+    time.sleep(10)
+
+    swss_check_RestartCount(state_db, restart_count)
+
+    for i in [0, 1, 2]:
+        (status, fvs) = tbl.get("Ethernet%d" % (i * 4))
+        assert status == True
+        oper_status = "unknown"
+        for v in fvs:
+            if v[0] == "oper_status":
+                oper_status = v[1]
+                break
+        if i == 2:
+            assert oper_status == "down"
+        else:
+            assert oper_status == "up"
 
 
 def test_swss_fdb_syncup_and_crm(dvs):
