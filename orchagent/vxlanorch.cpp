@@ -13,6 +13,7 @@
 #include "request_parser.h"
 #include "vxlanorch.h"
 #include "directory.h"
+#include "sai_redis_idempotent.h"
 
 /* Global variables */
 extern sai_object_id_t gSwitchId;
@@ -224,7 +225,9 @@ bool VxlanTunnelOrch::addOperation(const Request& request)
     tunnel_ids_t ids;
     try
     {
+        SET_OBJ_OWNER(tunnel_name + "_");
         ids.tunnel_map_id  = create_tunnel_map();
+        UNSET_OBJ_OWNER();
         ids.tunnel_id      = create_tunnel(ids.tunnel_map_id);
         ids.tunnel_term_id = create_tunnel_termination(ids.tunnel_id, src_ip.getV4Addr(), dst_ip.getV4Addr(), gVirtualRouterId);
     }

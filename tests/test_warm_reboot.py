@@ -774,7 +774,8 @@ def test_OrchagentWarmRestartReadyCheck(dvs):
     # Should fail since orchagent has been frozen at last step.
     (exitcode, result) =  dvs.runcmd("/usr/bin/orchagent_restart_check -n -s -w 500")
     assert result == "RESTARTCHECK failed\n"
-    # recover for other test cases.
+
+    # recover for test cases after this one.
     stop_swss(dvs)
     start_swss(dvs)
     time.sleep(5)
