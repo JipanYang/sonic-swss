@@ -154,8 +154,9 @@ void WarmStartHelper::reconcile(void)
         KeyOpFieldsValuesTuple &newKfv = kkfv.second;
         if(kfvOp(newKfv) == DEL_COMMAND)
         {
-            //Application is trying to delete non-existing enties?
-            SWSS_LOG_ERROR("Warm-Restart reconciliation: deleting non-existing entry %s\n",
+            // May get an add and a delete while the timer is running for
+            // an entry that wasn't in the appdb
+            SWSS_LOG_DEBUG("Warm-Restart reconciliation: deleting non-existing entry in appDB%s\n",
                             kfvKey(newKfv).c_str());
         }
         else
