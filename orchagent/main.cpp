@@ -288,7 +288,16 @@ int main(int argc, char **argv)
             SWSS_LOG_ERROR("Failed to initialize orchstration daemon");
             exit(EXIT_FAILURE);
         }
-        syncd_apply_view();
+
+        /*
+        * In syncd view comparison solution, apply view has been sent
+        * immediately after restore is done
+        */
+        if (!WarmStart::isWarmStart())
+        {
+            syncd_apply_view();
+        }
+
         orchDaemon->start();
     }
     catch (char const *e)

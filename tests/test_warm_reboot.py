@@ -728,7 +728,6 @@ def test_swss_neighbor_syncup(dvs):
     swss_app_check_RestartCount_single(state_db, restart_count, "neighsyncd")
 
 
-# TODO: This test case fails sometimes due to left over arp delete message from kernel.
 # TODO: The condition of warm restart readiness check is still under discussion.
 def test_OrchagentWarmRestartReadyCheck(dvs):
 

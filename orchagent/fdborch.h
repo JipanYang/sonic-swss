@@ -34,6 +34,7 @@ typedef unordered_map<string, vector<SavedFdbEntry>> fdb_entries_by_port_t;
 class FdbOrch: public Orch, public Subject, public Observer
 {
 public:
+    
     FdbOrch(DBConnector *db, string tableName, PortsOrch *port);
 
     ~FdbOrch()
