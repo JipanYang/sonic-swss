@@ -139,15 +139,7 @@ def test_PortSyncdWarmRestart(dvs):
     appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
     state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
 
-    # enable warm restart
-    # TODO: use cfg command to config it
-    create_entry_tbl(
-        conf_db,
-        swsscommon.CFG_WARM_RESTART_TABLE_NAME, "swss",
-        [
-            ("enable", "true"),
-        ]
-    )
+    dvs.runcmd("config warm_restart enable swss")
 
     dvs.runcmd("ifconfig Ethernet16  up")
     dvs.runcmd("ifconfig Ethernet20  up")
@@ -232,15 +224,7 @@ def test_VlanMgrdWarmRestart(dvs):
 
     time.sleep(1)
 
-    # enable warm restart
-    # TODO: use cfg command to config it
-    create_entry_tbl(
-        conf_db,
-        swsscommon.CFG_WARM_RESTART_TABLE_NAME, "swss",
-        [
-            ("enable", "true"),
-        ]
-    )
+    dvs.runcmd("config warm_restart enable swss")
 
     # create vlan
     create_entry_tbl(
@@ -298,7 +282,6 @@ def test_VlanMgrdWarmRestart(dvs):
 
     (status, fvs) = tbl.get("Vlan20:11.0.0.10")
     assert status == True
-
 
     (exitcode, bv_before) = dvs.runcmd("bridge vlan")
     print(bv_before)
@@ -398,15 +381,7 @@ def test_swss_neighbor_syncup(dvs):
     conf_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
     state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
 
-    # enable warm restart
-    # TODO: use cfg command to config it
-    create_entry_tbl(
-        conf_db,
-        swsscommon.CFG_WARM_RESTART_TABLE_NAME, "swss",
-        [
-            ("enable", "true"),
-        ]
-    )
+    dvs.runcmd("config warm_restart enable swss")
 
     #
     # Testcase1:
@@ -638,13 +613,7 @@ def test_swss_neighbor_syncup(dvs):
     # setup timer in configDB
     timer_value = "15"
 
-    create_entry_tbl(
-        conf_db,
-        swsscommon.CFG_WARM_RESTART_TABLE_NAME, "swss",
-        [
-            ("neighsyncd_timer", timer_value),
-        ]
-    )
+    dvs.runcmd("config warm_restart neighsyncd_timer {}".format(timer_value))
 
     # get restore_count
     restore_count = swss_get_RestoreCount(state_db)
@@ -788,15 +757,7 @@ def test_swss_port_state_syncup(dvs):
     conf_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
     state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
 
-    # enable warm restart
-    # TODO: use cfg command to config it
-    create_entry_tbl(
-        conf_db,
-        swsscommon.CFG_WARM_RESTART_TABLE_NAME, "swss",
-        [
-            ("enable", "true"),
-        ]
-    )
+    dvs.runcmd("config warm_restart enable swss")
 
     tbl = swsscommon.Table(appl_db, swsscommon.APP_PORT_TABLE_NAME)
 
