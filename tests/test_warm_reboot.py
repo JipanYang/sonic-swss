@@ -316,10 +316,15 @@ def test_swss_warm_restore(dvs):
     state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
     restart_count = swss_get_RestoreCount(dvs, state_db)
     dvs.stop_swss()
-    time.sleep(5)
+    time.sleep(10)
     dvs.runcmd("mv /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b")
+    pubsub = dvs.SubscribeAsicDbObject("SAI_OBJECT_TYPE")
     dvs.start_swss()
     time.sleep(10)
+
+    (nadd, ndel) = dvs.CountSubscribedObjects(pubsub)
+    assert nadd == 0
+    assert ndel == 0
 
     checkCleanSaiRedisCSR(dvs)
 
