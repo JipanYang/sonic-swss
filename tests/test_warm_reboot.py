@@ -5,12 +5,14 @@ import time
 import json
 
 # Get restore count of all processes supporting warm restart
-def swss_get_RestoreCount(state_db):
+def swss_get_RestoreCount(dvs, state_db):
     restore_count = {}
     warmtbl = swsscommon.Table(state_db, swsscommon.STATE_WARM_RESTART_TABLE_NAME)
     keys = warmtbl.getKeys()
     assert  len(keys) !=  0
     for key in keys:
+        if key not in dvs.swssd:
+            continue
         (status, fvs) = warmtbl.get(key)
         assert status == True
         for fv in fvs:
@@ -20,12 +22,14 @@ def swss_get_RestoreCount(state_db):
     return restore_count
 
 # function to check the restore count incremented by 1 for all processes supporting warm restart
-def swss_check_RestoreCount(state_db, restore_count):
+def swss_check_RestoreCount(dvs, state_db, restore_count):
     warmtbl = swsscommon.Table(state_db, swsscommon.STATE_WARM_RESTART_TABLE_NAME)
     keys = warmtbl.getKeys()
     print(keys)
     assert  len(keys) > 0
     for key in keys:
+        if key not in dvs.swssd:
+            continue
         (status, fvs) = warmtbl.get(key)
         assert status == True
         for fv in fvs:
@@ -164,7 +168,7 @@ def test_PortSyncdWarmRestart(dvs, testlog):
     (status, fvs) = neighTbl.get("Ethernet20:11.0.0.10")
     assert status == True
 
-    restore_count = swss_get_RestoreCount(state_db)
+    restore_count = swss_get_RestoreCount(dvs, state_db)
 
     # restart portsyncd
     dvs.runcmd(['sh', '-c', 'pkill -x portsyncd'])
@@ -275,7 +279,7 @@ def test_VlanMgrdWarmRestart(dvs, testlog):
     (exitcode, bv_before) = dvs.runcmd("bridge vlan")
     print(bv_before)
 
-    restore_count = swss_get_RestoreCount(state_db)
+    restore_count = swss_get_RestoreCount(dvs, state_db)
 
     dvs.runcmd(['sh', '-c', 'pkill -x vlanmgrd'])
 
@@ -310,16 +314,16 @@ def test_swss_warm_restore(dvs):
     dvs.runcmd("mkdir -p /etc/sonic/warm_restart/swss")
 
     state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
-    restart_count = swss_get_RestoreCount(state_db)
-    stop_swss(dvs)
+    restart_count = swss_get_RestoreCount(dvs, state_db)
+    dvs.stop_swss()
     time.sleep(5)
     dvs.runcmd("mv /var/log/swss/sairedis.rec /var/log/swss/sairedis.rec.b")
-    start_swss(dvs)
+    dvs.start_swss()
     time.sleep(10)
 
     checkCleanSaiRedisCSR(dvs)
 
-    swss_check_RestoreCount(state_db, restart_count)
+    swss_check_RestoreCount(dvs, state_db, restart_count)
 
 def stop_neighsyncd(dvs):
     dvs.runcmd(['sh', '-c', 'pkill -x neighsyncd'])
@@ -414,7 +418,7 @@ def test_swss_neighbor_syncup(dvs, testlog):
     #
 
     # get restore_count
-    restore_count = swss_get_RestoreCount(state_db)
+    restore_count = swss_get_RestoreCount(dvs, state_db)
 
     # stop neighsyncd and sairedis.rec
     stop_neighsyncd(dvs)
@@ -463,7 +467,7 @@ def test_swss_neighbor_syncup(dvs, testlog):
     #       just that if we want to add the same neighbor again, use "change" instead of "add"
 
     # get restore_count
-    restore_count = swss_get_RestoreCount(state_db)
+    restore_count = swss_get_RestoreCount(dvs, state_db)
 
     # stop neighsyncd
     stop_neighsyncd(dvs)
@@ -534,7 +538,7 @@ def test_swss_neighbor_syncup(dvs, testlog):
     # Check the timer is not retrieved from configDB since it is not configured
 
     # get restore_count
-    restore_count = swss_get_RestoreCount(state_db)
+    restore_count = swss_get_RestoreCount(dvs, state_db)
 
     # stop neighsyncd
     stop_neighsyncd(dvs)
@@ -609,7 +613,7 @@ def test_swss_neighbor_syncup(dvs, testlog):
     dvs.runcmd("config warm_restart neighsyncd_timer {}".format(timer_value))
 
     # get restore_count
-    restore_count = swss_get_RestoreCount(state_db)
+    restore_count = swss_get_RestoreCount(dvs, state_db)
 
     # stop neighsyncd
     stop_neighsyncd(dvs)
@@ -757,7 +761,7 @@ def test_swss_port_state_syncup(dvs, testlog):
 
     tbl = swsscommon.Table(appl_db, swsscommon.APP_PORT_TABLE_NAME)
 
-    restore_count = swss_get_RestoreCount(state_db)
+    restore_count = swss_get_RestoreCount(dvs, state_db)
 
     # update port admin state
     dvs.runcmd("ifconfig Ethernet0 10.0.0.0/31 up")
@@ -804,7 +808,7 @@ def test_swss_port_state_syncup(dvs, testlog):
     dvs.start_swss()
     time.sleep(10)
 
-    swss_check_RestoreCount(state_db, restore_count)
+    swss_check_RestoreCount(dvs, state_db, restore_count)
 
     for i in [0, 1, 2]:
         (status, fvs) = tbl.get("Ethernet%d" % (i * 4))
@@ -868,9 +872,9 @@ def test_swss_fdb_syncup_and_crm(dvs):
     # Change the polling interval to 20 so we may see the crm counter changes after warm restart
     dvs.runcmd("crm config polling interval 20")
 
-    restart_count = swss_get_RestoreCount(state_db)
+    restart_count = swss_get_RestoreCount(dvs, state_db)
 
-    stop_swss(dvs)
+    dvs.stop_swss()
 
     # delete the FDB entry in AppDB before swss is started again,
     # the orchagent is supposed to sync up the entry from ASIC DB after warm restart
@@ -878,10 +882,10 @@ def test_swss_fdb_syncup_and_crm(dvs):
 
 
     time.sleep(1)
-    start_swss(dvs)
+    dvs.start_swss()
     time.sleep(10)
 
-    swss_check_RestoreCount(state_db, restart_count)
+    swss_check_RestoreCount(dvs, state_db, restart_count)
 
     # get counters for FDB entries, it should be 0
     used_counter = getCrmCounterValue(dvs, 'STATS', 'crm_stats_fdb_entry_used')
