@@ -10,6 +10,7 @@
 #include "crmorch.h"
 #include "notifier.h"
 #include "sai_serialize.h"
+#include "warm_restart.h"
 
 extern sai_fdb_api_t    *sai_fdb_api;
 
@@ -533,15 +534,25 @@ bool FdbOrch::addFdbEntry(const FdbEntry& entry, const string& port_name, const 
     attr.value.s32 = SAI_PACKET_ACTION_FORWARD;
     attrs.push_back(attr);
 
-    sai_status_t status = sai_fdb_api->create_fdb_entry(&fdb_entry, (uint32_t)attrs.size(), attrs.data());
-    if (status != SAI_STATUS_SUCCESS)
+    if (type == "dynamic" &&
+        WarmStart::isWarmStart() &&
+        WarmStart::getWarmStartState("orchagent") == WarmStart::INITIALIZED)
     {
-        SWSS_LOG_ERROR("Failed to create %s FDB %s on %s, rv:%d",
-                type.c_str(), entry.mac.to_string().c_str(), port_name.c_str(), status);
-        return false; //FIXME: it should be based on status. Some could be retried, some not
+        SWSS_LOG_NOTICE("WarmStart initialized phase: "
+            "skip pushing %s FDB %s on %s", type.c_str(), entry.mac.to_string().c_str(), port_name.c_str());
     }
+    else
+    {
+        sai_status_t status = sai_fdb_api->create_fdb_entry(&fdb_entry, (uint32_t)attrs.size(), attrs.data());
+        if (status != SAI_STATUS_SUCCESS)
+        {
+            SWSS_LOG_ERROR("Failed to create %s FDB %s on %s, rv:%d",
+                    type.c_str(), entry.mac.to_string().c_str(), port_name.c_str(), status);
+            return false; //FIXME: it should be based on status. Some could be retried, some not
+        }
 
-    SWSS_LOG_NOTICE("Create %s FDB %s on %s", type.c_str(), entry.mac.to_string().c_str(), port_name.c_str());
+        SWSS_LOG_NOTICE("Create %s FDB %s on %s", type.c_str(), entry.mac.to_string().c_str(), port_name.c_str());
+    }
 
     (void) m_entries.insert(entry);
 
