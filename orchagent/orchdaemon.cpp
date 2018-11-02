@@ -411,25 +411,26 @@ bool OrchDaemon::warmRestoreAndSyncUp()
     }
 
     /*
-     * First iteration is to handle all the existing data in predefined order.
+     * Three iterations are needed.
+     *
+     * First iteration: Orch(s) which do not have dependency on port table,
+     *   gBufferOrch, gPortsOrch(Port table and VLAN table),
+     *   and orch(s) which have dependency on Port but processed after it.
+     *
+     * Second iteration: gBufferOrch (has inter-dependency with gPortsOrch),
+     *   remaining attributes on port table for gPortsOrch,
+     *   gIntfsOrch which has dependency on both gBufferOrch and port table of gPortsOrch.
+     *   LAG_TABLE in gPortsOrch.
+     *
+     * Third iteration: Drain remaining data that are out of order like LAG_MEMBER_TABLE and
+     * VLAN_MEMBER_TABLE since they were checked before LAG_TABLE and VLAN_TABLE within gPortsOrch.
      */
-    for (Orch *o : m_orchList)
+    for (auto it = 0; it < 3; it++)
     {
-        o->doTask();
-    }
-    /*
-     * Drain remaining data that are out of order like LAG_MEMBER_TABLE and VLAN_MEMBER_TABLE
-     * since they were checked before LAG_TABLE and VLAN_TABLE.
-     */
-    for (Orch *o : m_orchList)
-    {
-        o->doTask();
-    }
-
-    // One more iteration due to the VLAN lag empty member restrictioin temporary fix, to be removed.
-    for (Orch *o : m_orchList)
-    {
-        o->doTask();
+        for (Orch *o : m_orchList)
+        {
+            o->doTask();
+        }
     }
 
     /*
@@ -442,7 +443,7 @@ bool OrchDaemon::warmRestoreAndSyncUp()
     {
         SWSS_LOG_ERROR("Orchagent state restore failed");
 
-        // return false;
+        return false;
     }
 
     SWSS_LOG_NOTICE("Orchagent state restore done");
