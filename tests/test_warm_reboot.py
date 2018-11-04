@@ -125,6 +125,78 @@ def checkCleanSaiRedisCSR(dvs):
     (exitcode, num) = dvs.runcmd(['sh', '-c', 'grep \|r\| /var/log/swss/sairedis.rec | wc -l'])
     assert num == '0\n'
 
+def test_swss_fdb_syncup_and_crm(dvs):
+
+    dvs.runcmd("config warm_restart enable swss")
+
+    # Prepare FDB entry before swss stop
+    appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
+    asic_db = swsscommon.DBConnector(swsscommon.ASIC_DB, dvs.redis_sock, 0)
+    conf_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
+    state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
+
+    # create a FDB entry in Application DB
+    create_entry_pst(
+        appl_db,
+        "FDB_TABLE", "Vlan12:52-54-00-25-06-E9",
+        [
+            ("port", "Ethernet12"),
+            ("type", "dynamic"),
+        ]
+    )
+    # create vlan
+    create_entry_tbl(
+        conf_db,
+        "VLAN", "Vlan12",
+        [
+            ("vlanid", "12"),
+        ]
+    )
+
+    # create vlan member entry in application db. Don't use Ethernet0/4/8 as IP configured on them in previous testing.
+    create_entry_tbl(
+        conf_db,
+        "VLAN_MEMBER", "Vlan12|Ethernet12",
+         [
+            ("tagging_mode", "untagged"),
+         ]
+    )
+    # check that the FDB entry was inserted into ASIC DB
+    assert how_many_entries_exist(asic_db, "ASIC_STATE:SAI_OBJECT_TYPE_FDB_ENTRY") == 1, "The fdb entry wasn't inserted to ASIC"
+
+    dvs.runcmd("crm config polling interval 1")
+    time.sleep(2)
+    # get counters
+    used_counter = getCrmCounterValue(dvs, 'STATS', 'crm_stats_fdb_entry_used')
+    assert used_counter == 1
+
+    # Change the polling interval to 20 so we may see the crm counter changes after warm restart
+    dvs.runcmd("crm config polling interval 20")
+
+    restart_count = swss_get_RestoreCount(dvs, state_db)
+
+    dvs.stop_swss()
+
+    # delete the FDB entry in AppDB before swss is started again,
+    # the orchagent is supposed to sync up the entry from ASIC DB after warm restart
+    del_entry_tbl(appl_db, "FDB_TABLE", "Vlan12:52-54-00-25-06-E9")
+
+
+    time.sleep(1)
+    dvs.start_swss()
+    time.sleep(10)
+
+    swss_check_RestoreCount(dvs, state_db, restart_count)
+
+    # get counters for FDB entries, it should be 0
+    used_counter = getCrmCounterValue(dvs, 'STATS', 'crm_stats_fdb_entry_used')
+    assert used_counter == 0
+    dvs.runcmd("crm config polling interval 10")
+    time.sleep(20)
+     # get counters for FDB entries, it should be 1
+    used_counter = getCrmCounterValue(dvs, 'STATS', 'crm_stats_fdb_entry_used')
+    assert used_counter == 1
+
 def test_PortSyncdWarmRestart(dvs, testlog):
 
     conf_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
@@ -332,6 +404,7 @@ def test_swss_warm_restore(dvs):
     checkCleanSaiRedisCSR(dvs)
 
     swss_check_RestoreCount(dvs, state_db, restart_count)
+
 
 def stop_neighsyncd(dvs):
     dvs.runcmd(['sh', '-c', 'pkill -x neighsyncd'])
@@ -830,76 +903,3 @@ def test_swss_port_state_syncup(dvs, testlog):
             assert oper_status == "down"
         else:
             assert oper_status == "up"
-
-
-def test_swss_fdb_syncup_and_crm(dvs):
-
-    dvs.runcmd("config warm_restart enable swss")
-
-    # Prepare FDB entry before swss stop
-    appl_db = swsscommon.DBConnector(swsscommon.APPL_DB, dvs.redis_sock, 0)
-    asic_db = swsscommon.DBConnector(swsscommon.ASIC_DB, dvs.redis_sock, 0)
-    conf_db = swsscommon.DBConnector(swsscommon.CONFIG_DB, dvs.redis_sock, 0)
-    state_db = swsscommon.DBConnector(swsscommon.STATE_DB, dvs.redis_sock, 0)
-
-    # create a FDB entry in Application DB
-    create_entry_pst(
-        appl_db,
-        "FDB_TABLE", "Vlan12:52-54-00-25-06-E9",
-        [
-            ("port", "Ethernet12"),
-            ("type", "dynamic"),
-        ]
-    )
-    # create vlan
-    create_entry_tbl(
-        conf_db,
-        "VLAN", "Vlan12",
-        [
-            ("vlanid", "12"),
-        ]
-    )
-
-    # create vlan member entry in application db. Don't use Ethernet0/4/8 as IP configured on them in previous testing.
-    create_entry_tbl(
-        conf_db,
-        "VLAN_MEMBER", "Vlan12|Ethernet12",
-         [
-            ("tagging_mode", "untagged"),
-         ]
-    )
-    # check that the FDB entry was inserted into ASIC DB
-    assert how_many_entries_exist(asic_db, "ASIC_STATE:SAI_OBJECT_TYPE_FDB_ENTRY") == 1, "The fdb entry wasn't inserted to ASIC"
-
-    dvs.runcmd("crm config polling interval 1")
-    time.sleep(2)
-    # get counters
-    used_counter = getCrmCounterValue(dvs, 'STATS', 'crm_stats_fdb_entry_used')
-    assert used_counter == 1
-
-    # Change the polling interval to 20 so we may see the crm counter changes after warm restart
-    dvs.runcmd("crm config polling interval 20")
-
-    restart_count = swss_get_RestoreCount(dvs, state_db)
-
-    dvs.stop_swss()
-
-    # delete the FDB entry in AppDB before swss is started again,
-    # the orchagent is supposed to sync up the entry from ASIC DB after warm restart
-    del_entry_tbl(appl_db, "FDB_TABLE", "Vlan12:52-54-00-25-06-E9")
-
-
-    time.sleep(1)
-    dvs.start_swss()
-    time.sleep(10)
-
-    swss_check_RestoreCount(dvs, state_db, restart_count)
-
-    # get counters for FDB entries, it should be 0
-    used_counter = getCrmCounterValue(dvs, 'STATS', 'crm_stats_fdb_entry_used')
-    assert used_counter == 0
-    dvs.runcmd("crm config polling interval 10")
-    time.sleep(20)
-     # get counters for FDB entries, it should be 1
-    used_counter = getCrmCounterValue(dvs, 'STATS', 'crm_stats_fdb_entry_used')
-    assert used_counter == 1
