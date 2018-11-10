@@ -125,7 +125,14 @@ class VirtualServer(object):
             ensure_system("ip netns delete %s" % self.nsname)
 
     def runcmd(self, cmd):
-        return os.system("ip netns exec %s %s" % (self.nsname, cmd))
+        try:
+            out = subprocess.check_output("ip netns exec %s %s" % (self.nsname, cmd), stderr=subprocess.STDOUT, shell=True)
+        except subprocess.CalledProcessError as e:
+            print "------rc={} for cmd: {}------".format(e.returncode, e.cmd)
+            print e.output.rstrip()
+            print "------"
+            return e.returncode
+        return 0
 
     def runcmd_async(self, cmd):
         return subprocess.Popen("ip netns exec %s %s" % (self.nsname, cmd), shell=True)
@@ -288,6 +295,26 @@ class DockerVirtualSwitch(object):
             cmd += "supervisorctl stop {}; ".format(pname)
         self.runcmd(['sh', '-c', cmd])
 
+    def start_zebra(dvs):
+        dvs.runcmd(['sh', '-c', 'supervisorctl start zebra'])
+
+        # Let's give zebra a chance to connect to FPM.
+        time.sleep(5)
+
+    def stop_zebra(dvs):
+        dvs.runcmd(['sh', '-c', 'pkill -x zebra'])
+        time.sleep(1)
+
+    def start_fpmsyncd(dvs):
+        dvs.runcmd(['sh', '-c', 'supervisorctl start fpmsyncd'])
+
+        # Let's give fpmsyncd a chance to connect to Zebra.
+        time.sleep(5)
+
+    def stop_fpmsyncd(dvs):
+        dvs.runcmd(['sh', '-c', 'pkill -x fpmsyncd'])
+        time.sleep(1)
+
     def init_asicdb_validator(self):
         self.asicdb = AsicDbValidator(self)
 
@@ -299,6 +326,11 @@ class DockerVirtualSwitch(object):
         except AttributeError:
             exitcode = 0
             out = res
+        if exitcode != 0:
+            print "-----rc={} for cmd {}-----".format(exitcode, cmd)
+            print out.rstrip()
+            print "-----"
+
         return (exitcode, out)
 
     def copy_file(self, path, filename):
@@ -327,13 +359,18 @@ class DockerVirtualSwitch(object):
             raise RuntimeError("Failed to unpack the archive.")
         os.system("chmod a+r -R log")
 
-    def add_log_marker(self):
+    def add_log_marker(self, file=None):
         marker = "=== start marker {} ===".format(datetime.now().isoformat())
-        self.ctn.exec_run("logger {}".format(marker))
+
+        if file:
+            self.runcmd(['sh', '-c', "echo \"{}\" >> {}".format(marker, file)])
+        else:
+            self.ctn.exec_run("logger {}".format(marker))
+
         return marker
 
     def SubscribeAppDbObject(self, objpfx):
-        r = redis.Redis(unix_socket_path=self.redis_sock, db=swsscommon.APP_DB)
+        r = redis.Redis(unix_socket_path=self.redis_sock, db=swsscommon.APPL_DB)
         pubsub = r.pubsub()
         pubsub.psubscribe("__keyspace@0__:%s*" % objpfx)
         return pubsub
@@ -368,26 +405,40 @@ class DockerVirtualSwitch(object):
         return (nadd, ndel)
 
     def GetSubscribedAppDbObjects(self, pubsub, ignore=None, timeout=10):
-        r = redis.Redis(unix_socket_path=self.redis_sock, db=swsscommon.APP_DB)
+        r = redis.Redis(unix_socket_path=self.redis_sock, db=swsscommon.APPL_DB)
 
         addobjs = []
         delobjs = []
         idle = 0
+        prev_key = None
 
         while True and idle < timeout:
             message = pubsub.get_message()
             if message:
                 print message
                 key = message['channel'].split(':', 1)[1]
+                # In producer/consumer_state_table scenarios, every entry will
+                # show up twice for every push/pop operation, so skip the second
+                # one to avoid double counting.
+                if key != None and key == prev_key:
+                    continue
+                # Skip instructions with meaningless keys. To be extended in the
+                # future to other undesired keys.
+                if key == "ROUTE_TABLE_KEY_SET" or key == "ROUTE_TABLE_DEL_SET":
+                    continue
                 if ignore:
                     fds = message['channel'].split(':')
                     if fds[2] in ignore:
                         continue
+
                 if message['data'] == 'hset':
+                    (_, k) = key.split(':', 1)
                     value=r.hgetall(key)
-                    addobjs.append({'key':k, 'vals':value})
+                    addobjs.append({'key':json.dumps(k), 'vals':json.dumps(value)})
+                    prev_key = key
                 elif message['data'] == 'del':
-                    delobjs.append(key)
+                    (_, k) = key.split(':', 1)
+                    delobjs.append({'key':json.dumps(k)})
                 idle = 0
             else:
                 time.sleep(1)
@@ -417,7 +468,8 @@ class DockerVirtualSwitch(object):
                     (_, t, k) = key.split(':', 2)
                     addobjs.append({'type':t, 'key':k, 'vals':value})
                 elif message['data'] == 'del':
-                    delobjs.append(key)
+                    (_, t, k) = key.split(':', 2)
+                    delobjs.append({'key':k})
                 idle = 0
             else:
                 time.sleep(1)
