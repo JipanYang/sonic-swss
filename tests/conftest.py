@@ -137,6 +137,9 @@ class VirtualServer(object):
     def runcmd_async(self, cmd):
         return subprocess.Popen("ip netns exec %s %s" % (self.nsname, cmd), shell=True)
 
+    def runcmd_output(self, cmd):
+        return subprocess.check_output("ip netns exec %s %s" % (self.nsname, cmd), shell=True)
+
 class DockerVirtualSwitch(object):
     def __init__(self, name=None, keeptb=False, useTempView=True):
         self.basicd = ['redis-server',

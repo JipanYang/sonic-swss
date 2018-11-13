@@ -745,6 +745,7 @@ Stores information for physical switch ports managed by the switch chip. Ports t
                                                                  ; dynanic data like port state, neighbor, routes
                                                                  ; and so on.
 
+
     shutdown_check  = "ignored" / "passed" / "failed"            ; passed: pre-shutdown data check passed
                                                                  ; failed: pre-shutdown data check failed
                                                                  ; ignored: pre-shutdown data check failed, but asked to ignore it
@@ -757,6 +758,11 @@ Stores information for physical switch ports managed by the switch chip. Ports t
                                                                  ; ignored: warm restore data check failed, but asked to ignore it.
                                                                  ; If value of shutdown_check is "ignored" or empty,  and the data check
                                                                  ; failed, "igored" will set on restore_check.
+
+### NEIGH_RESTORE_TABLE
+    ;State for neighbor table restoring process during warm reboot
+    key                 = NEIGH_RESTORE_TABLE|Flags
+    restored            = "true" / "false" ; restored state
 
 ## Configuration files
 What configuration files should we have?  Do apps, orch agent each need separate files?
