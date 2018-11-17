@@ -2321,7 +2321,8 @@ bool PortsOrch::initializePort(Port &p)
     /*
      * If oper_status is not empty, orchagent is doing warm start, restore hostif oper status.
      */
-    if (!operStatus.empty())
+    // Always set SAI_HOSTIF_ATTR_OPER_STATUS for persistent behavior
+    //if (!operStatus.empty())
     {
         sai_attribute_t attr;
         attr.id = SAI_HOSTIF_ATTR_OPER_STATUS;
