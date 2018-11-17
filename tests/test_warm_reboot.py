@@ -1092,7 +1092,9 @@ def test_routing_WarmRestart(dvs, testlog):
     assert len(addobjs) != 0
 
     (addobjs, delobjs) = dvs.GetSubscribedAsicDbObjects(pubsubAsicDB)
-    assert len(addobjs) != 0
+    # assert len(addobjs) != 0
+    # Idempotence of libsairedis
+    assert len(addobjs) == 0
 
 
     #############################################################################
