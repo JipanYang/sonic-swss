@@ -184,6 +184,7 @@ def test_swss_fdb_syncup_and_crm(dvs):
 
     time.sleep(1)
     dvs.start_swss()
+    start_restore_neighbors(dvs)
     time.sleep(10)
 
     swss_check_RestoreCount(dvs, state_db, restart_count)
