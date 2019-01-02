@@ -38,7 +38,7 @@ Stores information for physical switch ports managed by the switch chip. Ports t
 
 ---------------------------------------------
 ### INTF_TABLE
-intfsyncd manages this table.  In SONiC, CPU (management) and logical ports (vlan, loopback, LAG) are declared in /etc/network/interface and loaded into the INTF_TABLE.
+cfgmgrd manages this table.  In SONiC, CPU (management) and logical ports (vlan, loopback, LAG) are declared in /etc/network/interface and /etc/sonic/config_db.json and loaded into the INTF_TABLE.
 
 IP prefixes are formatted according to [RFC5954](https://tools.ietf.org/html/rfc5954) with a prefix length appended to the end
 
@@ -630,6 +630,35 @@ Equivalent RedisDB entry:
     12) "0"
     127.0.0.1:6379>
 
+### VXLAN\_TUNNEL\_MAP
+    ;Stores vxlan tunnel map configuration. Defines mapping between vxlan vni and vrf
+
+    key       = VXLAN_TUNNEL_MAP:tunnel_name:tunnel_map_name
+                                                ; tunnel_name is a reference to created vxlan tunnel
+                                                ; tunnel_map_name is an arbitrary name of the map
+    vni       = 1*8DIGIT                        ; vni id, defined for tunnel map
+    vrf       = vrf_name                        ; name of the vrf
+
+### VNET\_ROUTE\_TUNNEL_TABLE
+    ;Defines schema for VNet Route tunnel table attributes
+
+    key                        = VNET_ROUTE_TUNNEL_TABLE:vnet_name:prefix
+                                                ; Vnet route tunnel table with prefix
+    ; field                      value
+    endpoint                   = IP             ; Host VM IP address
+    mac_address                = 12HEXDIG       ; Inner dest mac in encapsulated packet (Optional)
+    vxlanid                    = 1*8DIGIT       ; VNI value in encapsulated packet (Optional)
+
+    ;value annotations
+    vnet_name                  = 1*16VCHAR
+
+### VNET\_ROUTE_TABLE
+    ;Defines schema for VNet Route table attributes
+    key                        = VNET_ROUTE_TABLE:vnet_name:prefix
+                                                ; Vnet route table with prefix
+    ;field                       value
+    nexthop                    = IP             ; Nexthop IP address (Optional)
+    ifname                     = ifname         ; Interface name
 
 ## Configuration DB schema
 
@@ -685,6 +714,13 @@ Stores information for physical switch ports managed by the switch chip. Ports t
                                             ; the elected routing-stack.
                                             ; Supported range: 1-3600.
 
+    teamsyncd_timer     = 1*4DIGIT          ; teamsyncd_timer holds the time interval utilized by teamsyncd during warm-restart episodes.
+                                            ; The timer is started when teamsyncd starts. During the timer interval teamsyncd 
+                                            ; will preserver all LAG interface changes, but it will not apply them. The changes 
+                                            ; will only be applied when the timer expired. During the changes application the stale
+                                            ; LAG entries will be removed, the new LAG entries will be created.
+                                            ; Supported range: 1-9999. 0 is invalid
+
 
 ### VXLAN\_TUNNEL
 Stores vxlan tunnels configuration
@@ -705,6 +741,11 @@ Status: ready
     vni       = uint24                          ; vni id, defined for tunnel map
     vlan      = "Vlan"vlan_id                   ; name of the existing vlan interface
 
+### NEIGH_TABLE
+    ; Stores the neighbors. Defines static configuration of neighbor entries. If mac address is not specified, implementation shall resolve the mac-address for the neighbor IP.
+    key           = NEIGH|PORT_TABLE.name / VLAN_INTF_TABLE.name / LAG_INTF_TABLE.name|prefix
+    neigh         = 12HEXDIG         ; mac address of the neighbor (optional)
+    family        = "IPv4" / "IPv6"  ; address family
 
 ## State DB schema
 
@@ -726,6 +767,11 @@ Stores information for physical switch ports managed by the switch chip. Ports t
     ;Status: work in progress
 
     key             = WARM_RESTART_TABLE:process_name         ; process_name is a unique process identifier.
+                                                              ; with exception of 'warm-shutdown' operation.
+                                                              ; 'warm-shutdown' operation key is used to
+                                                              ; track warm shutdown stages and results.
+                                                              ; Added to this table to leverage the existing
+                                                              ; "show warm-restart state" command.
 
     restore_count   = 1*10DIGIT                               ; a value between 0 and 2147483647 to keep track
                                                               ; of the number of times that an application has
@@ -770,5 +816,3 @@ What configuration files should we have?  Do apps, orch agent each need separate
 [port_config.ini](https://github.com/stcheng/swss/blob/mock/portsyncd/port_config.ini) - defines physical port information
 
 portsyncd reads from port_config.ini and updates PORT_TABLE in APP_DB
-
-All other apps (intfsyncd) read from PORT_TABLE in APP_DB
