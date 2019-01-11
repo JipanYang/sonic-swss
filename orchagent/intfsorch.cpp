@@ -218,13 +218,6 @@ void IntfsOrch::doTask(Consumer &consumer)
                 continue;
             }
 
-            // buffer configuration hasn't been applied yet, hold from intf config.
-            if (!gBufferOrch->isPortReady(alias))
-            {
-                it++;
-                continue;
-            }
-
             auto it_intfs = m_syncdIntfses.find(alias);
             if (it_intfs == m_syncdIntfses.end())
             {
