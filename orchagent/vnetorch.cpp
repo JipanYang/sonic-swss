@@ -14,6 +14,7 @@
 #include "vxlanorch.h"
 #include "directory.h"
 #include "swssnet.h"
+#include "sai_redis_idempotent.h"
 
 extern sai_virtual_router_api_t* sai_virtual_router_api;
 extern sai_route_api_t* sai_route_api;
@@ -87,11 +88,13 @@ bool VNetVrfObject::createObj(vector<sai_attribute_t>& attrs)
     for (auto vr_type : vr_cntxt)
     {
         sai_object_id_t router_id;
+        SET_OBJ_OWNER(vnet_name_ + std::to_string(static_cast<int>(vr_type)) + "_"); //To distinguish virtual routers
         if (vr_type != VR_TYPE::VR_INVALID && l_fn(router_id))
         {
             SWSS_LOG_DEBUG("VNET vr_type %d router id %lx  ", vr_type, router_id);
             vr_ids_.insert(std::pair<VR_TYPE, sai_object_id_t>(vr_type, router_id));
         }
+        UNSET_OBJ_OWNER();
     }
 
     SWSS_LOG_INFO("VNET '%s' router object created ", vnet_name_.c_str());
