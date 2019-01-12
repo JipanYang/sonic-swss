@@ -2520,6 +2520,9 @@ bool PortsOrch::addBridgePort(Port &port)
             port.m_alias.c_str(), status);
         return false;
     }
+    // For warm reboot, to overwrite the SAI_BRIDGE_PORT_FDB_LEARNING_MODE_DISABLE setting done before shutdown.
+    // Do it again because we are not restoring to the pre-shutdown state for this specific attribute
+    setBridgePortLearningFDB(port, SAI_BRIDGE_PORT_FDB_LEARNING_MODE_HW);
 
     if (!setHostIntfsStripTag(port, SAI_HOSTIF_VLAN_TAG_KEEP))
     {
