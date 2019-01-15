@@ -84,11 +84,6 @@ void syncd_apply_view()
 {
     SWSS_LOG_NOTICE("Notify syncd APPLY_VIEW");
 
-    // skip view op for warm start
-    if ( WarmStart::isWarmStart() )
-    {
-        return;
-    }
     sai_status_t status;
     sai_attribute_t attr;
     attr.id = SAI_REDIS_SWITCH_ATTR_NOTIFY_SYNCD;

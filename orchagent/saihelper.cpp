@@ -10,7 +10,6 @@ extern "C" {
 #include <sairedis.h>
 #include "timestamp.h"
 #include "saihelper.h"
-#include "warm_restart.h"
 
 using namespace std;
 using namespace swss;
@@ -207,18 +206,15 @@ void initSaiRedis(const string &record_location)
     }
     SWSS_LOG_NOTICE("Enable redis pipeline");
 
-    // skip view op for warm start
-    if ( !WarmStart::isWarmStart() )
-    {
-        attr.id = SAI_REDIS_SWITCH_ATTR_NOTIFY_SYNCD;
-        attr.value.s32 = SAI_REDIS_NOTIFY_SYNCD_INIT_VIEW;
-        status = sai_switch_api->set_switch_attribute(gSwitchId, &attr);
+    attr.id = SAI_REDIS_SWITCH_ATTR_NOTIFY_SYNCD;
+    attr.value.s32 = SAI_REDIS_NOTIFY_SYNCD_INIT_VIEW;
+    status = sai_switch_api->set_switch_attribute(gSwitchId, &attr);
 
-        if (status != SAI_STATUS_SUCCESS)
-        {
-            SWSS_LOG_ERROR("Failed to notify syncd INIT_VIEW, rv:%d", status);
-            exit(EXIT_FAILURE);
-        }
+    if (status != SAI_STATUS_SUCCESS)
+    {
+        SWSS_LOG_ERROR("Failed to notify syncd INIT_VIEW, rv:%d", status);
+        exit(EXIT_FAILURE);
     }
+
     SWSS_LOG_NOTICE("Notify syncd INIT_VIEW");
 }
