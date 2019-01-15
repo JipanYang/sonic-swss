@@ -1634,6 +1634,9 @@ void PortsOrch::doPortTask(Consumer &consumer)
 
             if (alias == "PortConfigDone")
             {
+                // Insert a PortInitToStart entry in m_pendingPortSet to prevent
+                // other depender object being configured before port finishes config.
+                m_pendingPortSet.emplace("PortInitToStart");
                 it = consumer.m_toSync.erase(it);
                 continue;
             }
@@ -1648,6 +1651,8 @@ void PortsOrch::doPortTask(Consumer &consumer)
             else
             {
                 m_pendingPortSet.erase(alias);
+                // erase PortInitToStart entry with any port config.
+                m_pendingPortSet.erase("PortInitToStart");
             }
 
             Port p;
@@ -1763,9 +1768,9 @@ void PortsOrch::doPortTask(Consumer &consumer)
                 {
                     if (setPortMtu(p.m_port_id, mtu))
                     {
+                        SWSS_LOG_NOTICE("Set port %s MTU from %u to %u", alias.c_str(), p.m_mtu, mtu);
                         p.m_mtu = mtu;
                         m_portList[alias] = p;
-                        SWSS_LOG_NOTICE("Set port %s MTU to %u", alias.c_str(), mtu);
                         if (p.m_rif_id)
                         {
                             gIntfsOrch->setRouterIntfsMtu(p);
