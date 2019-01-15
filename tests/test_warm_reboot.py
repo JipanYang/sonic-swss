@@ -854,6 +854,7 @@ def test_swss_neighbor_syncup(dvs, testlog):
     intf_tbl._del("{}|28.0.0.9/24".format(intfs[1]))
     intf_tbl._del("{}|2400::1/64".format(intfs[0]))
     intf_tbl._del("{}|2800::1/64".format(intfs[1]))
+    dvs.runcmd("ip -s -s neigh flush all")
     time.sleep(2)
 
 
