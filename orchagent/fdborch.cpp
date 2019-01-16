@@ -10,7 +10,6 @@
 #include "crmorch.h"
 #include "notifier.h"
 #include "sai_serialize.h"
-#include "warm_restart.h"
 
 extern sai_fdb_api_t    *sai_fdb_api;
 
@@ -48,6 +47,8 @@ FdbOrch::FdbOrch(TableConnector applDbConnector, TableConnector stateDbConnector
  *
  * Syncd puts a copy of FDB into ASIC DB the moment it generates FDB notification.
  * Here orchagent reads the data directly from ASIC_STATE:SAI_OBJECT_TYPE_FDB_ENTRY
+ *
+ * TODO: handle the case of stale FDB entries.
  */
 void FdbOrch::syncUpFdb()
 {
@@ -82,8 +83,17 @@ void FdbOrch::syncUpFdb()
         {
             sai_fdb_entry_t entry;
             sai_deserialize_fdb_entry(key, entry);
+
+            FdbEntry fdbEntry;
+            fdbEntry.mac = entry.mac_address;
+            fdbEntry.bv_id = entry.bv_id;
+            if (m_entries.find(fdbEntry) != m_entries.end())
+            {
+                SWSS_LOG_INFO("Skipping known FDB from ASICDB: %s", key.c_str());
+                continue;
+            }
             this->update(SAI_FDB_EVENT_LEARNED, &entry, bridge_port_id);
-            SWSS_LOG_INFO("FDB from ASICDB %s", key.c_str());
+            SWSS_LOG_INFO("FDB from ASICDB: %s", key.c_str());
         }
     }
 }
@@ -108,12 +118,18 @@ bool FdbOrch::storeFdbEntryState(const FdbUpdate& update)
 {
     const FdbEntry& entry = update.entry;
     const Port& port = update.port;
-    sai_vlan_id_t vlan_id = port.m_port_vlan_id;
     const MacAddress& mac = entry.mac;
     string portName = port.m_alias;
+    Port vlan;
+
+    if (!m_portsOrch->getPort(entry.bv_id, vlan))
+    {
+        SWSS_LOG_NOTICE("FdbOrch notification: Failed to locate vlan port from bv_id 0x%lx", entry.bv_id);
+        return false;
+    }
 
     // ref: https://github.com/Azure/sonic-swss/blob/master/doc/swss-schema.md#fdb_table
-    string key = "Vlan" + to_string(vlan_id) + ":" + mac.to_string();
+    string key = "Vlan" + to_string(vlan.m_vlan_info.vlan_id) + ":" + mac.to_string();
 
     if (update.add)
     {
@@ -534,25 +550,15 @@ bool FdbOrch::addFdbEntry(const FdbEntry& entry, const string& port_name, const 
     attr.value.s32 = SAI_PACKET_ACTION_FORWARD;
     attrs.push_back(attr);
 
-    if (type == "dynamic" &&
-        WarmStart::isWarmStart() &&
-        WarmStart::getWarmStartState("orchagent") == WarmStart::INITIALIZED)
+    sai_status_t status = sai_fdb_api->create_fdb_entry(&fdb_entry, (uint32_t)attrs.size(), attrs.data());
+    if (status != SAI_STATUS_SUCCESS)
     {
-        SWSS_LOG_NOTICE("WarmStart initialized phase: "
-            "skip pushing %s FDB %s on %s", type.c_str(), entry.mac.to_string().c_str(), port_name.c_str());
+        SWSS_LOG_ERROR("Failed to create %s FDB %s on %s, rv:%d",
+                type.c_str(), entry.mac.to_string().c_str(), port_name.c_str(), status);
+        return false; //FIXME: it should be based on status. Some could be retried, some not
     }
-    else
-    {
-        sai_status_t status = sai_fdb_api->create_fdb_entry(&fdb_entry, (uint32_t)attrs.size(), attrs.data());
-        if (status != SAI_STATUS_SUCCESS)
-        {
-            SWSS_LOG_ERROR("Failed to create %s FDB %s on %s, rv:%d",
-                    type.c_str(), entry.mac.to_string().c_str(), port_name.c_str(), status);
-            return false; //FIXME: it should be based on status. Some could be retried, some not
-        }
 
-        SWSS_LOG_NOTICE("Create %s FDB %s on %s", type.c_str(), entry.mac.to_string().c_str(), port_name.c_str());
-    }
+    SWSS_LOG_NOTICE("Create %s FDB %s on %s", type.c_str(), entry.mac.to_string().c_str(), port_name.c_str());
 
     (void) m_entries.insert(entry);
 
