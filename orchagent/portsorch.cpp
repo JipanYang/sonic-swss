@@ -390,13 +390,13 @@ void PortsOrch::removeDefaultBridgePorts()
     SWSS_LOG_NOTICE("Remove bridge ports from default 1Q bridge");
 }
 
-bool PortsOrch::isInitDone()
+bool PortsOrch::isPortReady()
 {
     return m_initDone && m_pendingPortSet.empty();
 }
 
 /* Upon receiving PortInitDone, all the configured ports have been created*/
-bool PortsOrch::isPortCreated()
+bool PortsOrch::isInitDone()
 {
     return m_initDone;
 }
@@ -2266,7 +2266,7 @@ void PortsOrch::doTask(Consumer &consumer)
     else
     {
         /* Wait for all ports to be initialized */
-        if (!isInitDone())
+        if (!isPortReady())
         {
             return;
         }
@@ -3088,7 +3088,7 @@ void PortsOrch::doTask(NotificationConsumer &consumer)
     SWSS_LOG_ENTER();
 
     /* Wait for all ports to be initialized */
-    if (!isInitDone())
+    if (!isPortReady())
     {
         return;
     }
